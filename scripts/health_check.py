@@ -185,11 +185,17 @@ def check_twilio(env: dict) -> tuple[bool, str]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--send", action="store_true", help="also send a live WhatsApp test message")
+    ap.add_argument("--notify", action="store_true", help="always send a WhatsApp summary")
+    ap.add_argument("--notify-on-fail", action="store_true", help="send WhatsApp only if something failed")
     args = ap.parse_args()
 
     print(f"Health check — {ROOT}")
     print("=" * 60)
     fails = 0
+    summary_lines: list[str] = []
+
+    def record(ok: bool, label: str, msg: str) -> None:
+        summary_lines.append(f"{'OK' if ok else 'FAIL'} {label}: {msg}")
 
     # 1. Files
     errs = check_files()
@@ -197,8 +203,10 @@ def main() -> None:
         fails += len(errs)
         for e in errs:
             print(f"{RED} {e}")
+        record(False, "Files", "; ".join(errs[:3]))
     else:
         print(f"{GREEN} all required files and dirs present ({len(REQUIRED_FILES)} files, {len(REQUIRED_DIRS)} dirs)")
+        record(True, "Files", f"{len(REQUIRED_FILES)} files + {len(REQUIRED_DIRS)} dirs present")
 
     # 2. Env
     env = load_env(ENV_PATH)
@@ -207,13 +215,16 @@ def main() -> None:
         fails += len(errs)
         for e in errs:
             print(f"{RED} {e}")
+        record(False, "Env", "; ".join(errs[:3]))
     else:
         print(f"{GREEN} config/.env has required keys (backend={env.get('WHATSAPP_BACKEND')})")
+        record(True, "Env", f"backend={env.get('WHATSAPP_BACKEND')}")
 
     # 3. GoldAPI
     if env.get("GOLDAPI_KEY"):
         ok, msg = check_goldapi(env["GOLDAPI_KEY"])
         print(f"{GREEN if ok else RED} GoldAPI: {msg}")
+        record(ok, "GoldAPI", msg[:120])
         if not ok:
             fails += 1
 
@@ -221,6 +232,7 @@ def main() -> None:
     if env.get("TWELVEDATA_KEY"):
         ok, msg = check_twelvedata(env["TWELVEDATA_KEY"])
         print(f"{GREEN if ok else RED} TwelveData: {msg}")
+        record(ok, "TwelveData", msg[:120])
         if not ok:
             fails += 1
 
@@ -228,6 +240,7 @@ def main() -> None:
     if env.get("WHATSAPP_BACKEND", "").lower() == "twilio" and env.get("TWILIO_ACCOUNT_SID"):
         ok, msg = check_twilio(env)
         print(f"{GREEN if ok else RED} Twilio auth: {msg}")
+        record(ok, "Twilio", msg[:120])
         if not ok:
             fails += 1
 
@@ -246,12 +259,25 @@ def main() -> None:
             fails += 1
 
     print("=" * 60)
-    if fails == 0:
+    overall_ok = fails == 0
+    if overall_ok:
         print(f"{GREEN} ALL CHECKS PASSED")
-        sys.exit(0)
     else:
         print(f"{RED} {fails} check(s) failed")
-        sys.exit(1)
+
+    # WhatsApp summary (always-on or fail-only)
+    if args.notify or (args.notify_on_fail and not overall_ok):
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        header = "XAU bot health check — " + ("ALL GREEN" if overall_ok else f"{fails} FAILURE(S)")
+        body = "\n".join(f"• {ln}" for ln in summary_lines)
+        msg = f"{header}\n{ts}\n{body}"
+        subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "notify_whatsapp.py"), msg],
+            cwd=str(ROOT),
+        )
+
+    sys.exit(0 if overall_ok else 1)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,43 @@
+name: XAUUSD Health Check
+
+on:
+  schedule:
+    # 06:50 UTC daily — just before the London brief at 07:00. If a key is
+    # dead, you get one WhatsApp before the session would have tried to run.
+    - cron: "50 6 * * *"
+  workflow_dispatch:
+    inputs:
+      force_notify:
+        description: "Always send WhatsApp summary (even on success)"
+        required: false
+        default: "false"
+
+concurrency:
+  group: health-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      GOLDAPI_KEY: ${{ secrets.GOLDAPI_KEY }}
+      TWELVEDATA_KEY: ${{ secrets.TWELVEDATA_KEY }}
+      WHATSAPP_BACKEND: twilio
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_API_KEY_SID: ${{ secrets.TWILIO_API_KEY_SID }}
+      TWILIO_API_KEY_SECRET: ${{ secrets.TWILIO_API_KEY_SECRET }}
+      TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
+      TWILIO_TO: ${{ secrets.TWILIO_TO }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run health check
+        run: |
+          if [ "${{ inputs.force_notify }}" = "true" ]; then
+            python scripts/health_check.py --notify
+          else
+            python scripts/health_check.py --notify-on-fail
+          fi
