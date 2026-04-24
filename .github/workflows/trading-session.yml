@@ -1,0 +1,76 @@
+name: XAUUSD Trading Session
+
+on:
+  schedule:
+    # All times UTC. GitHub cron can drift by several minutes — fine for pre-session prep.
+    - cron: "0 7 * * 1-5"    # London brief  (07:00 UTC, Mon-Fri)
+    - cron: "0 13 * * 1-5"   # NY brief      (13:00 UTC, Mon-Fri)
+  workflow_dispatch:
+    inputs:
+      session:
+        description: "Session label"
+        required: false
+        default: "manual"
+      account:
+        description: "Account size in USD"
+        required: false
+        default: "10000"
+
+concurrency:
+  group: trading-session
+  cancel-in-progress: false
+
+jobs:
+  run-session:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      # Data feeds
+      GOLDAPI_KEY: ${{ secrets.GOLDAPI_KEY }}
+      TWELVEDATA_KEY: ${{ secrets.TWELVEDATA_KEY }}
+      # Twilio WhatsApp
+      WHATSAPP_BACKEND: twilio
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_API_KEY_SID: ${{ secrets.TWILIO_API_KEY_SID }}
+      TWILIO_API_KEY_SECRET: ${{ secrets.TWILIO_API_KEY_SECRET }}
+      TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
+      TWILIO_TO: ${{ secrets.TWILIO_TO }}
+      TWILIO_CONTENT_SID: ${{ secrets.TWILIO_CONTENT_SID }}   # optional; omit for freeform
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve session label
+        id: label
+        run: |
+          HOUR=$(date -u +%H)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "session=${{ inputs.session }}" >> $GITHUB_OUTPUT
+            echo "account=${{ inputs.account }}" >> $GITHUB_OUTPUT
+          elif [ "$HOUR" = "07" ]; then
+            echo "session=london" >> $GITHUB_OUTPUT
+            echo "account=10000" >> $GITHUB_OUTPUT
+          else
+            echo "session=ny" >> $GITHUB_OUTPUT
+            echo "account=10000" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run session
+        run: python scripts/run_auto.py ${{ steps.label.outputs.session }} ${{ steps.label.outputs.account }}
+
+      - name: Commit journal + cache updates
+        if: always()
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add journal/trades.md data/cache/signal.json data/cache/levels.json 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "auto: ${{ steps.label.outputs.session }} session $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          else
+            echo "No changes to commit."
+          fi

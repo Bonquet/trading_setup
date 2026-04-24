@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where pdftoppm *)",
+      "Bash(pdftoppm -v)",
+      "Bash(winget install *)",
+      "Bash(export PATH=\"/c/Users/acebl/AppData/Local/Microsoft/WinGet/Packages/oschwartz10612.Poppler_Microsoft.Winget.Source_8wekyb3d8bbwe/poppler-25.07.0/Library/bin:$PATH\")",
+      "Bash(pdftotext -layout \"/c/Users/acebl/Documents/Trading Setup/50 EMA_copy.pdf\" \"/c/Users/acebl/Documents/Trading Setup/50_EMA.txt\")",
+      "Bash(pdftotext -layout \"/c/Users/acebl/Documents/Trading Setup/Pullback-Trading-Strategy_copy.pdf\" \"/c/Users/acebl/Documents/Trading Setup/Pullback.txt\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('scripts/fetch_gold.py'\\).read\\(\\)\\); ast.parse\\(open\\('scripts/compute_levels.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(py -3 --version)",
+      "Bash(where py *)",
+      "Bash(where python3 *)",
+      "Bash(\"/c/Users/acebl/AppData/Local/Programs/Python/Python312/python.exe\" scripts/notify_whatsapp.py \"XAU bot test send\")",
+      "Bash(curl -sS -w '\\\\nHTTP:%{http_code}\\\\n' -X POST https://api.twilio.com/2010-04-01/Accounts/ACa4b729d76faf86df59a69040e2bfc6b6/Messages.json --data-urlencode From=whatsapp:+14155238886 --data-urlencode To=whatsapp:+2348126457598 --data-urlencode 'Body=XAU bot test' -u SKf728c0eb24431dccf624b2416a10ac9b:CYFOMH4OBhKGlmTRMTzLkIvdwZ5FkCxM)",
+      "Bash(\"/c/Users/acebl/AppData/Local/Programs/Python/Python312/python.exe\" scripts/notify_whatsapp.py \"XAU bot - live test #2\")",
+      "Bash(\"/c/Users/acebl/AppData/Local/Programs/Python/Python312/python.exe\" scripts/notify_whatsapp.py \"XAU bot - live test #3\")",
+      "Bash(/c/Users/acebl/AppData/Local/Programs/Python/Python312/python.exe -c ' *)",
+      "Bash(\"/c/Users/acebl/AppData/Local/Programs/Python/Python312/python.exe\" scripts/notify_whatsapp.py \"XAU bot - live test #4 after env fix\")",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" --version)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth status)",
+      "Bash(\"C:\\\\Users\\\\acebl\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe\" \"C:\\\\Users\\\\acebl\\\\Documents\\\\Trading Setup\\\\scripts\\\\health_check.py\")",
+      "PowerShell(gh auth status)",
+      "PowerShell($p = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; if \\(Test-Path $p\\) { & $p --version } else { \"not at standard path\" }; Get-Command gh -ErrorAction SilentlyContinue | Select-Object Source)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth status)"
+    ]
+  }
+}

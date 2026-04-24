@@ -1,0 +1,258 @@
+"""End-to-end health check for the XAUUSD trading bot.
+
+Verifies:
+  1. Python + required files/folders
+  2. config/.env has required keys
+  3. GoldAPI key works (live spot fetch)
+  4. TwelveData key works (1 candle fetch)
+  5. Twilio creds authenticate (account GET — does NOT send a message)
+  6. Optional: --send flag fires a real WhatsApp test message
+
+Exit code 0 = all green, non-zero = at least one check failed.
+
+Usage:
+  python scripts/health_check.py
+  python scripts/health_check.py --send   # also send a test WhatsApp
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from base64 import b64encode
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+ENV_PATH = ROOT / "config" / ".env"
+
+REQUIRED_FILES = [
+    "CLAUDE.md",
+    "strategy/playbook.md",
+    "strategy/50ema_pullback.md",
+    "memory/MEMORY_INDEX.md",
+    "routines/london.md",
+    "routines/ny.md",
+    "journal/trades.md",
+    "scripts/fetch_gold.py",
+    "scripts/compute_levels.py",
+    "scripts/generate_signal.py",
+    "scripts/notify_whatsapp.py",
+    "scripts/run_auto.py",
+    "scripts/weekly_stats.py",
+    ".github/workflows/trading-session.yml",
+]
+REQUIRED_DIRS = [
+    "memory/trade_history",
+    "memory/wins",
+    "memory/losses",
+    "memory/mistakes",
+    "memory/market_profiles",
+    "data/cache",
+]
+
+USER_AGENT = "Mozilla/5.0 (Trading-Setup/1.0)"
+
+GREEN = "[OK]"
+RED = "[FAIL]"
+WARN = "[WARN]"
+
+
+def load_env(path: Path) -> dict[str, str]:
+    import os
+    env: dict[str, str] = {}
+    if path.exists():
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            v = v.strip()
+            if " #" in v and not (v.startswith('"') or v.startswith("'")):
+                v = v.split(" #", 1)[0].strip()
+            env[k.strip()] = v
+    for k in (
+        "GOLDAPI_KEY", "TWELVEDATA_KEY", "WHATSAPP_BACKEND",
+        "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN",
+        "TWILIO_API_KEY_SID", "TWILIO_API_KEY_SECRET",
+        "TWILIO_FROM", "TWILIO_TO",
+    ):
+        if os.environ.get(k):
+            env[k] = os.environ[k]
+    return env
+
+
+def http_get(url: str, headers: dict | None = None, timeout: int = 15) -> tuple[int, str]:
+    h = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    if headers:
+        h.update(headers)
+    req = urllib.request.Request(url, headers=h)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", errors="replace")
+    except Exception as e:  # noqa: BLE001
+        return 0, str(e)
+
+
+def check_files() -> list[str]:
+    errs = []
+    for rel in REQUIRED_FILES:
+        if not (ROOT / rel).exists():
+            errs.append(f"missing file: {rel}")
+    for rel in REQUIRED_DIRS:
+        if not (ROOT / rel).is_dir():
+            errs.append(f"missing dir: {rel}")
+    return errs
+
+
+def check_env(env: dict) -> list[str]:
+    errs = []
+    for k in ("GOLDAPI_KEY", "TWELVEDATA_KEY"):
+        if not env.get(k):
+            errs.append(f"{k} missing in config/.env")
+    backend = env.get("WHATSAPP_BACKEND", "disabled").lower()
+    if backend == "twilio":
+        for k in ("TWILIO_ACCOUNT_SID", "TWILIO_FROM", "TWILIO_TO"):
+            if not env.get(k):
+                errs.append(f"{k} missing (required for twilio backend)")
+        if not ((env.get("TWILIO_API_KEY_SID") and env.get("TWILIO_API_KEY_SECRET"))
+                or env.get("TWILIO_AUTH_TOKEN")):
+            errs.append("need TWILIO_API_KEY_SID+TWILIO_API_KEY_SECRET or TWILIO_AUTH_TOKEN")
+    return errs
+
+
+def check_goldapi(key: str) -> tuple[bool, str]:
+    code, body = http_get(
+        "https://www.goldapi.io/api/XAU/USD",
+        headers={"x-access-token": key, "Content-Type": "application/json"},
+    )
+    if code != 200:
+        return False, f"HTTP {code}: {body[:200]}"
+    try:
+        j = json.loads(body)
+        return True, f"spot=${j.get('price')}"
+    except Exception:  # noqa: BLE001
+        return False, f"bad JSON: {body[:200]}"
+
+
+def check_twelvedata(key: str) -> tuple[bool, str]:
+    q = urllib.parse.urlencode({"symbol": "XAU/USD", "interval": "1h", "outputsize": 1, "apikey": key})
+    code, body = http_get(f"https://api.twelvedata.com/time_series?{q}")
+    if code != 200:
+        return False, f"HTTP {code}: {body[:200]}"
+    try:
+        j = json.loads(body)
+        if j.get("status") == "error":
+            return False, j.get("message", "unknown error")
+        vals = j.get("values") or []
+        if not vals:
+            return False, "no candles returned"
+        return True, f"last close={vals[0].get('close')}"
+    except Exception:  # noqa: BLE001
+        return False, f"bad JSON: {body[:200]}"
+
+
+def check_twilio(env: dict) -> tuple[bool, str]:
+    sid = env.get("TWILIO_ACCOUNT_SID", "")
+    api_sid = env.get("TWILIO_API_KEY_SID", "")
+    api_secret = env.get("TWILIO_API_KEY_SECRET", "")
+    tok = env.get("TWILIO_AUTH_TOKEN", "")
+    if api_sid and api_secret:
+        user, pw = api_sid, api_secret
+    elif tok:
+        user, pw = sid, tok
+    else:
+        return False, "no auth configured"
+    auth = b64encode(f"{user}:{pw}".encode()).decode()
+    code, body = http_get(
+        f"https://api.twilio.com/2010-04-01/Accounts/{sid}.json",
+        headers={"Authorization": f"Basic {auth}"},
+    )
+    if code != 200:
+        return False, f"HTTP {code}: {body[:200]}"
+    try:
+        j = json.loads(body)
+        return True, f"account status={j.get('status')} friendly_name={j.get('friendly_name')}"
+    except Exception:  # noqa: BLE001
+        return False, f"bad JSON: {body[:200]}"
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--send", action="store_true", help="also send a live WhatsApp test message")
+    args = ap.parse_args()
+
+    print(f"Health check — {ROOT}")
+    print("=" * 60)
+    fails = 0
+
+    # 1. Files
+    errs = check_files()
+    if errs:
+        fails += len(errs)
+        for e in errs:
+            print(f"{RED} {e}")
+    else:
+        print(f"{GREEN} all required files and dirs present ({len(REQUIRED_FILES)} files, {len(REQUIRED_DIRS)} dirs)")
+
+    # 2. Env
+    env = load_env(ENV_PATH)
+    errs = check_env(env)
+    if errs:
+        fails += len(errs)
+        for e in errs:
+            print(f"{RED} {e}")
+    else:
+        print(f"{GREEN} config/.env has required keys (backend={env.get('WHATSAPP_BACKEND')})")
+
+    # 3. GoldAPI
+    if env.get("GOLDAPI_KEY"):
+        ok, msg = check_goldapi(env["GOLDAPI_KEY"])
+        print(f"{GREEN if ok else RED} GoldAPI: {msg}")
+        if not ok:
+            fails += 1
+
+    # 4. TwelveData
+    if env.get("TWELVEDATA_KEY"):
+        ok, msg = check_twelvedata(env["TWELVEDATA_KEY"])
+        print(f"{GREEN if ok else RED} TwelveData: {msg}")
+        if not ok:
+            fails += 1
+
+    # 5. Twilio
+    if env.get("WHATSAPP_BACKEND", "").lower() == "twilio" and env.get("TWILIO_ACCOUNT_SID"):
+        ok, msg = check_twilio(env)
+        print(f"{GREEN if ok else RED} Twilio auth: {msg}")
+        if not ok:
+            fails += 1
+
+    # 6. Optional live send
+    if args.send:
+        print("- Sending live WhatsApp test…")
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "notify_whatsapp.py"),
+             "XAU bot — health_check test send"],
+            cwd=str(ROOT),
+        )
+        if r.returncode == 0:
+            print(f"{GREEN} WhatsApp send returned 0 (check your phone)")
+        else:
+            print(f"{RED} WhatsApp send failed (exit {r.returncode})")
+            fails += 1
+
+    print("=" * 60)
+    if fails == 0:
+        print(f"{GREEN} ALL CHECKS PASSED")
+        sys.exit(0)
+    else:
+        print(f"{RED} {fails} check(s) failed")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
