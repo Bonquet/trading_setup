@@ -51,8 +51,9 @@ REQUIRED_DIRS = [
     "memory/losses",
     "memory/mistakes",
     "memory/market_profiles",
-    "data/cache",
 ]
+# Created at runtime if missing — not an error if absent.
+RUNTIME_DIRS = ["data/cache"]
 
 USER_AGENT = "Mozilla/5.0 (Trading-Setup/1.0)"
 
@@ -107,6 +108,9 @@ def check_files() -> list[str]:
     for rel in REQUIRED_DIRS:
         if not (ROOT / rel).is_dir():
             errs.append(f"missing dir: {rel}")
+    # Auto-create runtime dirs so CI checkouts don't false-alarm.
+    for rel in RUNTIME_DIRS:
+        (ROOT / rel).mkdir(parents=True, exist_ok=True)
     return errs
 
 
