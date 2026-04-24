@@ -1,0 +1,88 @@
+name: WhatsApp Command Dispatch
+
+# Triggered by a Twilio Function when you text /health, /london, /ny, /best, /summary
+# (see twilio/whatsapp-inbound.js and TWILIO_INBOUND_SETUP.md)
+
+on:
+  repository_dispatch:
+    types: [whatsapp-command]
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "Command to run (health|london|ny|best|summary)"
+        required: true
+        default: "health"
+
+concurrency:
+  group: whatsapp-command
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GOLDAPI_KEY: ${{ secrets.GOLDAPI_KEY }}
+      TWELVEDATA_KEY: ${{ secrets.TWELVEDATA_KEY }}
+      WHATSAPP_BACKEND: twilio
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_API_KEY_SID: ${{ secrets.TWILIO_API_KEY_SID }}
+      TWILIO_API_KEY_SECRET: ${{ secrets.TWILIO_API_KEY_SECRET }}
+      TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
+      TWILIO_TO: ${{ secrets.TWILIO_TO }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Resolve command
+        id: cmd
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "cmd=${{ github.event.client_payload.command }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "cmd=${{ inputs.command }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run command
+        run: |
+          set -e
+          CMD="${{ steps.cmd.outputs.cmd }}"
+          case "$CMD" in
+            health)
+              python scripts/health_check.py --notify
+              ;;
+            london)
+              python scripts/run_auto.py london 10000
+              ;;
+            ny)
+              python scripts/run_auto.py ny 10000
+              ;;
+            best)
+              # Force a signal attempt regardless of session label
+              python scripts/run_auto.py manual 10000
+              ;;
+            summary)
+              python scripts/weekly_stats.py --days 7 --notify
+              ;;
+            help|"")
+              python scripts/notify_whatsapp.py "Commands: /health /london /ny /best /summary /help"
+              ;;
+            *)
+              python scripts/notify_whatsapp.py "Unknown command: /$CMD — try /help"
+              exit 0
+              ;;
+          esac
+      - name: Commit journal + cache updates
+        if: always()
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add journal/trades.md data/cache/signal.json data/cache/levels.json data/cache/weekly_stats.json 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "auto: /${{ steps.cmd.outputs.cmd }} command $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          else
+            echo "No changes to commit."
+          fi
