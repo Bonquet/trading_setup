@@ -20,17 +20,31 @@ exports.handler = async function (context, event, callback) {
   const twiml = new Twilio.twiml.MessagingResponse();
 
   const raw = (event.Body || "").trim();
-  const word = raw.replace(/^\//, "").split(/\s+/)[0].toLowerCase();
+  const stripped = raw.replace(/^\//, "");
+  const parts = stripped.split(/\s+/);
+  const word = (parts[0] || "").toLowerCase();
+  const args = parts.slice(1).join(" ");
 
-  const ALLOWED = new Set(["health", "london", "ny", "best", "summary"]);
+  const ALLOWED = new Set([
+    "health", "london", "ny", "best", "summary",
+    "accounts", "balance", "active", "took", "close", "pnl",
+  ]);
   const HELP_TEXT =
     "XAU bot commands:\n" +
-    "/health   – check all APIs\n" +
-    "/london   – run London brief now\n" +
-    "/ny       – run NY brief now\n" +
-    "/best     – current best setup\n" +
-    "/summary  – weekly review\n" +
-    "/help     – this message";
+    "— sessions —\n" +
+    "/health   check all APIs\n" +
+    "/london   run London brief now\n" +
+    "/ny       run NY brief now\n" +
+    "/best     current best setup\n" +
+    "/summary  weekly review\n" +
+    "— accounts —\n" +
+    "/accounts                list all\n" +
+    "/balance <name> <amt>    set balance\n" +
+    "/active <name>           set active acct\n" +
+    "/took <acct>             mirror last trade\n" +
+    "/close win|loss|be|@px   close open\n" +
+    "/pnl                     P&L report\n" +
+    "/help     this message";
 
   if (!word || word === "help") {
     twiml.message(HELP_TEXT);
@@ -60,7 +74,7 @@ exports.handler = async function (context, event, callback) {
       },
       body: JSON.stringify({
         event_type: "whatsapp-command",
-        client_payload: { command: word, from: event.From || "" },
+        client_payload: { command: word, args: args, from: event.From || "" },
       }),
     });
 

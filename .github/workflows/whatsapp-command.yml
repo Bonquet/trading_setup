@@ -9,9 +9,13 @@ on:
   workflow_dispatch:
     inputs:
       command:
-        description: "Command to run (health|london|ny|best|summary)"
+        description: "Command to run (health|london|ny|best|summary|accounts|balance|active|took|close|pnl)"
         required: true
         default: "health"
+      args:
+        description: "Raw args (for balance/active/took/close)"
+        required: false
+        default: ""
 
 concurrency:
   group: whatsapp-command
@@ -39,16 +43,33 @@ jobs:
           python-version: "3.12"
       - name: Resolve command
         id: cmd
+        env:
+          DISPATCH_CMD: ${{ github.event.client_payload.command }}
+          DISPATCH_ARGS: ${{ github.event.client_payload.args }}
+          INPUT_CMD: ${{ inputs.command }}
+          INPUT_ARGS: ${{ inputs.args }}
         run: |
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            echo "cmd=${{ github.event.client_payload.command }}" >> "$GITHUB_OUTPUT"
+            echo "cmd=$DISPATCH_CMD" >> "$GITHUB_OUTPUT"
+            {
+              echo "args<<ARGS_EOF"
+              echo "$DISPATCH_ARGS"
+              echo "ARGS_EOF"
+            } >> "$GITHUB_OUTPUT"
           else
-            echo "cmd=${{ inputs.command }}" >> "$GITHUB_OUTPUT"
+            echo "cmd=$INPUT_CMD" >> "$GITHUB_OUTPUT"
+            {
+              echo "args<<ARGS_EOF"
+              echo "$INPUT_ARGS"
+              echo "ARGS_EOF"
+            } >> "$GITHUB_OUTPUT"
           fi
       - name: Run command
+        env:
+          CMD: ${{ steps.cmd.outputs.cmd }}
+          ARGS: ${{ steps.cmd.outputs.args }}
         run: |
           set -e
-          CMD="${{ steps.cmd.outputs.cmd }}"
           case "$CMD" in
             health)
               python scripts/health_check.py --notify
@@ -60,14 +81,16 @@ jobs:
               python scripts/run_auto.py ny 10000
               ;;
             best)
-              # Force a signal attempt regardless of session label
               python scripts/run_auto.py manual 10000
               ;;
             summary)
               python scripts/weekly_stats.py --days 7 --notify
               ;;
+            accounts|balance|active|took|close|pnl)
+              python scripts/accounts.py whatsapp "$CMD" "$ARGS"
+              ;;
             help|"")
-              python scripts/notify_whatsapp.py "Commands: /health /london /ny /best /summary /help"
+              python scripts/notify_whatsapp.py "Commands: /health /london /ny /best /summary /accounts /balance /active /took /close /pnl /help"
               ;;
             *)
               python scripts/notify_whatsapp.py "Unknown command: /$CMD — try /help"
@@ -79,7 +102,7 @@ jobs:
         run: |
           git config user.name "trading-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add journal/trades.md data/cache/signal.json data/cache/levels.json data/cache/weekly_stats.json 2>/dev/null || true
+          git add journal/trades.md data/accounts.json data/cache/signal.json data/cache/levels.json data/cache/weekly_stats.json 2>/dev/null || true
           if ! git diff --cached --quiet; then
             git commit -m "auto: /${{ steps.cmd.outputs.cmd }} command $(date -u +%Y-%m-%dT%H:%MZ)"
             git push

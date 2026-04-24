@@ -79,21 +79,40 @@ def append_journal(sig: dict, session: str) -> None:
         f.write(entry)
 
 
+def resolve_account_balance(cli_arg: str) -> tuple[str, float]:
+    """Return (account_name, balance_usd) preferring the active account in accounts.json."""
+    state = ROOT / "data" / "accounts.json"
+    if state.exists():
+        try:
+            data = json.loads(state.read_text(encoding="utf-8"))
+            name = data.get("active")
+            if name and name in data.get("accounts", {}):
+                return name, float(data["accounts"][name]["balance"])
+        except Exception as e:  # noqa: BLE001
+            print(f"(accounts.json unreadable: {e} — falling back to CLI arg)")
+    return "default", float(cli_arg)
+
+
 def main() -> None:
     session = sys.argv[1] if len(sys.argv) > 1 else "auto"
-    account = sys.argv[2] if len(sys.argv) > 2 else "10000"
+    account_cli = sys.argv[2] if len(sys.argv) > 2 else "10000"
     py = sys.executable
+
+    acct_name, balance = resolve_account_balance(account_cli)
+    print(f"Sizing against account '{acct_name}' balance ${balance:,.2f}")
 
     run([py, str(SCRIPTS / "fetch_gold.py")])
     run([py, str(SCRIPTS / "compute_levels.py")])
     # generate_signal exits 10 for No Trade; that's a clean terminal state
-    code = run([py, str(SCRIPTS / "generate_signal.py"), account], allow_codes=(0, 10))
+    code = run([py, str(SCRIPTS / "generate_signal.py"), str(balance)], allow_codes=(0, 10))
     if code == 10:
         print("No signal to notify. Exiting cleanly.")
         return
 
     sig = json.loads(SIGNAL.read_text())
     msg = build_message(sig, session)
+    # Prefix message with account context
+    msg = f"[{acct_name} ${balance:,.0f}]\n" + msg
 
     # If a custom Twilio template is configured, inject variables at runtime
     env_overlay = os.environ.copy()
@@ -110,6 +129,19 @@ def main() -> None:
         print(f"Notifier returned {r.returncode} (non-fatal).")
 
     append_journal(sig, session)
+
+    # Record open trade against active account (if one is configured)
+    if acct_name != "default":
+        try:
+            subprocess.run(
+                [py, str(SCRIPTS / "accounts.py"), "open",
+                 acct_name, sig["direction"], str(sig["entry"]), str(sig["stop_loss"]),
+                 str(sig["tp1"]), str(sig["tp2"]), sig["strategy"], "1.0"],
+                cwd=str(ROOT), check=False,
+            )
+        except Exception as e:  # noqa: BLE001
+            print(f"(accounts.py open failed: {e} — non-fatal)")
+
     print("Done.")
 
 
