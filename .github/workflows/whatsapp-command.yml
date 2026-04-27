@@ -68,6 +68,7 @@ jobs:
         env:
           CMD: ${{ steps.cmd.outputs.cmd }}
           ARGS: ${{ steps.cmd.outputs.args }}
+          ON_DEMAND: "1"
         run: |
           set -e
           case "$CMD" in

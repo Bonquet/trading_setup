@@ -93,10 +93,32 @@ def resolve_account_balance(cli_arg: str) -> tuple[str, float]:
     return "default", float(cli_arg)
 
 
+def build_no_trade_message(session: str, levels: dict, signal_payload: dict, acct_name: str, balance: float) -> str:
+    """Diagnostic message for on-demand /best /london /ny that get No Trade."""
+    spot = levels.get("spot") or levels.get("spot_price")
+    tfs = levels.get("timeframes", {})
+    def pos(tf: str) -> str:
+        return tfs.get(tf, {}).get("position_vs_channel", "?")
+    reason = signal_payload.get("reason", "no setup")
+    return (
+        f"XAU /{session} — No Trade\n"
+        f"[{acct_name} ${balance:,.0f}]\n"
+        f"Spot: ${spot}\n"
+        f"D1: {pos('D1')} | H4: {pos('H4')}\n"
+        f"H1: {pos('H1')} | M15: {pos('M15')}\n"
+        f"Reason: {reason}\n"
+        f"(bot is alive — discipline rule fired)"
+    )
+
+
 def main() -> None:
     session = sys.argv[1] if len(sys.argv) > 1 else "auto"
     account_cli = sys.argv[2] if len(sys.argv) > 2 else "10000"
     py = sys.executable
+
+    # When invoked from a slash command (whatsapp-command.yml sets ON_DEMAND=1),
+    # always reply — even on No Trade. Cron stays silent on No Trade by default.
+    on_demand = os.environ.get("ON_DEMAND") == "1"
 
     acct_name, balance = resolve_account_balance(account_cli)
     print(f"Sizing against account '{acct_name}' balance ${balance:,.2f}")
@@ -106,6 +128,14 @@ def main() -> None:
     # generate_signal exits 10 for No Trade; that's a clean terminal state
     code = run([py, str(SCRIPTS / "generate_signal.py"), str(balance)], allow_codes=(0, 10))
     if code == 10:
+        if on_demand:
+            try:
+                levels = json.loads((ROOT / "data" / "cache" / "levels.json").read_text())
+                payload = json.loads(SIGNAL.read_text()) if SIGNAL.exists() else {}
+                msg = build_no_trade_message(session, levels, payload, acct_name, balance)
+                subprocess.run([py, str(SCRIPTS / "notify_whatsapp.py"), msg], cwd=str(ROOT), check=False)
+            except Exception as e:  # noqa: BLE001
+                print(f"(no-trade notify failed: {e})")
         print("No signal to notify. Exiting cleanly.")
         return
 
