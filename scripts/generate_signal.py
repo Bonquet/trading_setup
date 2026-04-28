@@ -42,7 +42,7 @@ STYLES = {
     "intraday": {"primary": "H1",  "htf": "H4", "stop_tf": "M15", "atr_buf": 0.75, "wr_long": -25,  "wr_short": -75, "stoch_long": 55,  "stoch_short": 45},
     "scalp":    {"primary": "M15", "htf": "H1", "stop_tf": "M15", "atr_buf": 1.5,  "wr_long": -30,  "wr_short": -70, "stoch_long": 50,  "stoch_short": 50},
 }
-DEFAULT_STYLE = "intraday"
+DEFAULT_STYLE = "swing"
 
 
 def no_trade(reason: str, data: dict) -> None:
@@ -117,43 +117,63 @@ def main() -> None:
 
     # Entry = current spot bid/ask where possible, else H4 close
     entry = float(spot) if spot else close
+
+    # H4 ATR is used for the volatility-based stop floor on swing trades
+    primary_atr = tf.get("atr14") or stop_atr or 5.0
+
+    # SL placement — pick the TIGHTEST valid stop from candidates so the lot can grow.
+    # Candidates:
+    #   A) structure stop = STOP_TF swing ± buffer × STOP_TF ATR
+    #   B) volatility stop = 1.5 × PRIMARY_TF ATR
+    # Floor: never tighter than 1.0 × PRIMARY_TF ATR (avoids noise stop-outs).
+    # Choose min(A, B) but >= floor.
+    atr_stop_dist = 1.5 * primary_atr
+    atr_floor = 1.0 * primary_atr
+
     if direction == "BUY":
         if not swing_l:
             no_trade("no swing low available for SL", data)
-        sl = swing_l - stop_atr * SL_ATR_BUFFER
-        risk = entry - sl
+        struct_dist = entry - (swing_l - stop_atr * SL_ATR_BUFFER)
+        # Pick the tighter, but not below ATR floor
+        risk = max(min(struct_dist, atr_stop_dist), atr_floor)
+        sl = entry - risk
         if risk <= 0:
-            no_trade("entry not above swing low — invalid SL distance", data)
-        tp2 = entry + 2 * risk
-        # Prefer pivot target if it gives >= 2R and is further
+            no_trade("invalid SL distance", data)
+        # TP search: take the FURTHEST pivot still inside reason (≤ 4R), giving 2.5–4R targets
+        tp_2r = entry + 2 * risk
+        tp_25r = entry + 2.5 * risk
+        tp_max = entry + 4 * risk
         pivot_target = None
-        for lvl in ("R1", "R2"):
+        for lvl in ("R2", "R1"):  # try R2 first (further target)
             v = pivots.get(lvl)
-            if v and v > entry + 2 * risk:
+            if v and tp_25r <= v <= tp_max:
                 pivot_target = v
                 break
-        tp1 = entry + 2 * risk
-        tp_final = pivot_target if pivot_target else tp2
+        tp_final = pivot_target if pivot_target else tp_25r
+        tp1 = tp_2r
     else:  # SELL
         if not swing_h:
             no_trade("no swing high available for SL", data)
-        sl = swing_h + stop_atr * SL_ATR_BUFFER
-        risk = sl - entry
+        struct_dist = (swing_h + stop_atr * SL_ATR_BUFFER) - entry
+        risk = max(min(struct_dist, atr_stop_dist), atr_floor)
+        sl = entry + risk
         if risk <= 0:
-            no_trade("entry not below swing high — invalid SL distance", data)
-        tp2 = entry - 2 * risk
+            no_trade("invalid SL distance", data)
+        tp_2r = entry - 2 * risk
+        tp_25r = entry - 2.5 * risk
+        tp_max = entry - 4 * risk
         pivot_target = None
-        for lvl in ("S1", "S2"):
+        for lvl in ("S2", "S1"):
             v = pivots.get(lvl)
-            if v and v < entry - 2 * risk:
+            if v and tp_max <= v <= tp_25r:
                 pivot_target = v
                 break
-        tp1 = entry - 2 * risk
-        tp_final = pivot_target if pivot_target else tp2
+        tp_final = pivot_target if pivot_target else tp_25r
+        tp1 = tp_2r
 
     rr = abs(tp_final - entry) / risk
     if rr < 2.0:
-        no_trade(f"RR {rr:.2f} < 2.0 — no room to pivot target", data)
+        no_trade(f"RR {rr:.2f} < 2.0 — no room to target", data)
 
     # Position sizing — caller passes account size, risk pct, and (optional) dollar cap
     account = float(sys.argv[1]) if len(sys.argv) > 1 else 10000.0
@@ -172,7 +192,9 @@ def main() -> None:
     # XAUUSD: 1 lot = 100 oz, $100 per $1 price move per standard lot.
     dollars_per_price_per_lot = 100.0
     lots_raw = budget_usd / (risk * dollars_per_price_per_lot)
-    lots = round(lots_raw, 2)
+    # Floor to 0.01 lots so we NEVER overshoot the budget (round-up would risk more)
+    import math
+    lots = math.floor(lots_raw * 100) / 100.0
     # Broker minimum is 0.01 lot. If even minimum exceeds the budget, refuse the trade
     # (this is the prop-firm safety net — wide stop = no trade).
     if lots < 0.01:

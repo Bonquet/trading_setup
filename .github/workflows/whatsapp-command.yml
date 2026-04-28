@@ -85,7 +85,12 @@ jobs:
               python scripts/run_auto.py ny 10000
               ;;
             best)
-              python scripts/run_auto.py manual 10000
+              # /best [high] — passes HIGH_CONVICTION=1 to use the doubled risk cap
+              if [ "${ARGS,,}" = "high" ] || [ "${ARGS,,}" = "aggressive" ]; then
+                HIGH_CONVICTION=1 python scripts/run_auto.py manual 10000
+              else
+                python scripts/run_auto.py manual 10000
+              fi
               ;;
             summary)
               python scripts/weekly_stats.py --days 7 --notify

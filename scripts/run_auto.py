@@ -180,8 +180,15 @@ def main() -> None:
     acct_name, acct = resolve_account("10000" if account_cli is None else account_cli)
     balance = float(acct.get("balance", 10000.0))
     risk_pct_decimal = float(acct.get("risk_pct", 1.0)) / 100.0
-    style = (acct.get("style") or "intraday").lower()
+    style = (acct.get("style") or "swing").lower()
+    # HIGH_CONVICTION=1 doubles the cap to high_conviction_risk_usd (set per account)
+    high_conviction = os.environ.get("HIGH_CONVICTION") == "1"
     max_risk_usd = float(acct.get("max_risk_per_trade_usd", 0.0))
+    if high_conviction:
+        hc_cap = float(acct.get("high_conviction_risk_usd", max_risk_usd * 2 if max_risk_usd else 0.0))
+        if hc_cap > 0:
+            max_risk_usd = hc_cap
+            print(f"HIGH CONVICTION mode → cap raised to ${hc_cap}")
     print(f"Sizing: account='{acct_name}' bal=${balance:,.2f} risk={risk_pct_decimal*100}% "
           f"style={style} cap=${max_risk_usd or 'none'}")
 
