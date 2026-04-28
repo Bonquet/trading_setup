@@ -17,6 +17,9 @@ on:
         required: false
         default: ""
 
+permissions:
+  contents: write
+
 concurrency:
   group: whatsapp-command
   cancel-in-progress: false
@@ -87,11 +90,17 @@ jobs:
             summary)
               python scripts/weekly_stats.py --days 7 --notify
               ;;
-            accounts|balance|active|took|close|pnl)
+            current)
+              # /current must run after compute so spot is fresh; kick a quick fetch+compute then show
+              python scripts/fetch_gold.py >/dev/null 2>&1 || true
+              python scripts/compute_levels.py >/dev/null 2>&1 || true
+              python scripts/accounts.py whatsapp "$CMD" "$ARGS"
+              ;;
+            accounts|balance|active|risk|took|close|pnl)
               python scripts/accounts.py whatsapp "$CMD" "$ARGS"
               ;;
             help|"")
-              python scripts/notify_whatsapp.py "Commands: /health /london /ny /best /summary /accounts /balance /active /took /close /pnl /help"
+              python scripts/notify_whatsapp.py "Commands: /health /london /ny /best /current /summary /accounts /balance /active /risk /took /close /pnl /help"
               ;;
             *)
               python scripts/notify_whatsapp.py "Unknown command: /$CMD — try /help"

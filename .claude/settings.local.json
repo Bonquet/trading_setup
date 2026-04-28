@@ -22,7 +22,15 @@
       "Bash(\"C:\\\\Users\\\\acebl\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe\" \"C:\\\\Users\\\\acebl\\\\Documents\\\\Trading Setup\\\\scripts\\\\health_check.py\")",
       "PowerShell(gh auth status)",
       "PowerShell($p = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; if \\(Test-Path $p\\) { & $p --version } else { \"not at standard path\" }; Get-Command gh -ErrorAction SilentlyContinue | Select-Object Source)",
-      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth status)"
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" auth status)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo create trading_setup --private --source . --remote origin --push)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" repo view Bonquet/trading_setup --json name,isEmpty,defaultBranchRef,url)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" secret list --repo Bonquet/trading_setup)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" workflow run trading-session.yml --repo Bonquet/trading_setup -f session=manual-test -f account=10000)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" run list --repo Bonquet/trading_setup --limit 3)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" run watch 24900047986 --repo Bonquet/trading_setup --exit-status 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" run view 24900047986 --repo Bonquet/trading_setup --log-failed 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\" run view 24900182709 --repo Bonquet/trading_setup --json conclusion,status,jobs --jq \"{status, conclusion, jobs: [.jobs[] | {name, conclusion}]}\")"
     ]
   }
 }

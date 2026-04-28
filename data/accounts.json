@@ -1,8 +1,8 @@
 {
   "active": "main",
   "accounts": {
-    "main": {"balance": 5000.0, "currency": "USD"},
-    "savings": {"balance": 10000.0, "currency": "USD"}
+    "main":    {"balance": 5000.0,  "currency": "USD", "risk_pct": 1.0},
+    "savings": {"balance": 10000.0, "currency": "USD", "risk_pct": 1.0}
   },
   "open": [],
   "closed": []

@@ -27,22 +27,24 @@ exports.handler = async function (context, event, callback) {
 
   const ALLOWED = new Set([
     "health", "london", "ny", "best", "summary",
-    "accounts", "balance", "active", "took", "close", "pnl",
+    "accounts", "balance", "active", "risk", "took", "close", "current", "pnl",
   ]);
   const HELP_TEXT =
     "XAU bot commands:\n" +
     "— sessions —\n" +
     "/health   check all APIs\n" +
-    "/london   run London brief now\n" +
-    "/ny       run NY brief now\n" +
-    "/best     current best setup\n" +
+    "/london   London brief now\n" +
+    "/ny       NY brief now\n" +
+    "/best     scan for setup now\n" +
+    "/current  show open trades\n" +
     "/summary  weekly review\n" +
     "— accounts —\n" +
     "/accounts                list all\n" +
     "/balance <name> <amt>    set balance\n" +
     "/active <name>           set active acct\n" +
-    "/took <acct>             mirror last trade\n" +
-    "/close win|loss|be|@px   close open\n" +
+    "/risk <name> <pct>       set risk %\n" +
+    "/took <acct> [lots]      mirror last trade\n" +
+    "/close win|loss|be|<px> [reason]\n" +
     "/pnl                     P&L report\n" +
     "/help     this message";
 

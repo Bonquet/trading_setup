@@ -128,13 +128,24 @@ def cmd_list() -> str:
 def cmd_set(name: str, balance: float, currency: str = "USD") -> str:
     data = load()
     existing = data["accounts"].get(name)
-    data["accounts"][name] = {"balance": float(balance), "currency": currency}
+    rp = (existing or {}).get("risk_pct", 1.0)
+    data["accounts"][name] = {"balance": float(balance), "currency": currency, "risk_pct": rp}
     if data["active"] is None:
         data["active"] = name
     save(data)
     verb = "updated" if existing else "created"
     active = " (now active)" if data["active"] == name and not existing else ""
-    return f"Account {verb}: {name} = ${balance:,.2f} {currency}{active}"
+    return f"Account {verb}: {name} = ${balance:,.2f} {currency} (risk {rp}%){active}"
+
+
+def cmd_risk(name: str, pct: float) -> str:
+    data = load()
+    require_account(data, name)
+    if pct <= 0 or pct > 10:
+        return f"Risk pct must be between 0 and 10. Got {pct}."
+    data["accounts"][name]["risk_pct"] = float(pct)
+    save(data)
+    return f"Risk set: {name} = {pct}% per trade"
 
 
 def cmd_active(name: str) -> str:
@@ -179,8 +190,11 @@ def cmd_open(account: str, direction: str, entry: float, sl: float,
             f"SL {sl} TP {tp2} — {lots} lots, risk ${risk_usd:,.2f} ({risk_pct}%)")
 
 
-def cmd_mirror(dest_account: str) -> str:
-    """Copy most recent open trade onto another account, re-sized for that balance."""
+def cmd_mirror(dest_account: str, lots_override: float | None = None) -> str:
+    """Copy most recent open trade onto another account.
+    If lots_override is given, use that exact lot size (broker-imposed sizing);
+    otherwise re-size for the destination's balance + risk_pct.
+    """
     data = load()
     require_account(data, dest_account)
     if not data["open"]:
@@ -189,9 +203,15 @@ def cmd_mirror(dest_account: str) -> str:
     if src["account"] == dest_account:
         return f"Most recent open trade is already on {dest_account}."
     bal = data["accounts"][dest_account]["balance"]
-    risk_usd = round(bal * src["risk_pct"] / 100.0, 2)
     stop_dist = abs(src["entry"] - src["sl"])
-    lots = round(risk_usd / (stop_dist * CONTRACT_SIZE), 2)
+    if lots_override is not None:
+        lots = float(lots_override)
+        risk_usd = round(lots * stop_dist * CONTRACT_SIZE, 2)
+        custom_note = " (custom lot)"
+    else:
+        risk_usd = round(bal * src["risk_pct"] / 100.0, 2)
+        lots = max(0.01, round(risk_usd / (stop_dist * CONTRACT_SIZE), 2))
+        custom_note = ""
     trade_id = now_iso().replace(":", "").replace("-", "") + "_m"
     mirror = dict(src)
     mirror.update({
@@ -204,14 +224,15 @@ def cmd_mirror(dest_account: str) -> str:
     })
     data["open"].append(mirror)
     save(data)
-    return (f"Mirrored #{src['id']} to {dest_account}: "
+    return (f"Mirrored #{src['id']} to {dest_account}{custom_note}: "
             f"{src['direction']} @ {src['entry']} — {lots} lots, risk ${risk_usd:,.2f}")
 
 
-def cmd_close(result: str, price: float | None = None) -> str:
-    """Close ALL currently-open trades with a shared outcome.
+def cmd_close(result: str, price: float | None = None, reason: str = "") -> str:
+    """Close ALL currently-open trades with a shared outcome + optional reason.
     result: win | loss | be | price
     price:  only required when result == 'price'
+    reason: free text — recorded with each closed trade
     """
     data = load()
     if not data["open"]:
@@ -244,7 +265,8 @@ def cmd_close(result: str, price: float | None = None) -> str:
         pnl = pnl_of(trade["direction"], trade["entry"], exit_p, trade["lots"])
         r = round(pnl / trade["risk_usd"], 2) if trade["risk_usd"] else 0.0
         closed = dict(trade)
-        closed.update({"exit": exit_p, "pnl_usd": pnl, "r": r, "status": status, "closed_at": now_iso()})
+        closed.update({"exit": exit_p, "pnl_usd": pnl, "r": r, "status": status,
+                       "closed_at": now_iso(), "reason": reason})
         data["closed"].append(closed)
         data["open"].remove(trade)
 
@@ -254,13 +276,48 @@ def cmd_close(result: str, price: float | None = None) -> str:
             acc["balance"] = round(acc["balance"] + pnl, 2)
         total_pnl_by.setdefault(trade["account"], 0.0)
         total_pnl_by[trade["account"]] += pnl
-        lines.append(f"• #{trade['id']} {trade['account']} {trade['direction']} {status.upper()} @ {exit_p} → {fmt_money(pnl)} ({r}R)")
+        why = f" [{reason}]" if reason else ""
+        lines.append(f"• #{trade['id']} {trade['account']} {trade['direction']} {status.upper()} @ {exit_p} → {fmt_money(pnl)} ({r}R){why}")
 
     save(data)
     lines.append("")
     lines.append("New balances:")
     for name, pnl in total_pnl_by.items():
         lines.append(f"• {name}: ${data['accounts'][name]['balance']:,.2f} ({fmt_money(pnl)})")
+    return "\n".join(lines)
+
+
+def _last_spot() -> float | None:
+    p = ROOT / "data" / "cache" / "levels.json"
+    if not p.exists():
+        return None
+    try:
+        return float(json.loads(p.read_text(encoding="utf-8")).get("spot") or 0) or None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def cmd_current() -> str:
+    """Show all currently-open trades with running P&L."""
+    data = load()
+    if not data["open"]:
+        return ("No open trades.\n"
+                "Latest cron runs publish signals via /best, /london, /ny — "
+                "if a setup fired, you'd see it here.")
+    spot = _last_spot()
+    lines = [f"Open trades ({len(data['open'])}):"]
+    if spot:
+        lines.append(f"Last cached spot: ${spot}")
+    lines.append("")
+    for t in data["open"]:
+        line = (f"#{t['id']} [{t['account']}] {t['direction']} @ {t['entry']}\n"
+                f"  SL {t['sl']} | TP {t['tp2']} | {t['lots']} lots | risk ${t['risk_usd']:,.2f}")
+        if spot:
+            running = pnl_of(t["direction"], t["entry"], spot, t["lots"])
+            r = round(running / t["risk_usd"], 2) if t["risk_usd"] else 0.0
+            line += f"\n  Running: {fmt_money(running)} ({r}R) at spot ${spot}"
+        line += f"\n  Strategy: {t.get('strategy','?')} | opened {t.get('opened_at','?')}"
+        lines.append(line)
     return "\n".join(lines)
 
 
@@ -313,23 +370,48 @@ def handle_whatsapp(command: str, raw_args: str, with_notify: bool = True) -> No
                 out = cmd_active(toks[0])
         elif cmd == "took":
             if not toks:
-                out = "Usage: /took <account>\nMirrors the most recent open trade onto that account."
+                out = ("Usage: /took <account> [lots]\n"
+                       "Mirrors the most recent open trade onto that account.\n"
+                       "Optional 2nd arg sets exact lot size (otherwise re-sized to that account's balance × risk%).")
             else:
-                out = cmd_mirror(toks[0])
+                lots = None
+                if len(toks) >= 2:
+                    try:
+                        lots = float(toks[1])
+                    except ValueError:
+                        lots = None
+                out = cmd_mirror(toks[0], lots_override=lots)
         elif cmd == "close":
             if not toks:
-                out = "Usage: /close win | loss | be | @<price>\nCloses all open trades with that outcome."
+                out = ("Usage: /close <result> [reason words...]\n"
+                       "result: win | loss | be | <price>\n"
+                       "Optional reason is recorded with the closed trade.\n"
+                       "Examples:\n"
+                       "  /close win clean run to TP\n"
+                       "  /close loss news spike past stop\n"
+                       "  /close 4720.5 trail-stop hit")
             else:
                 first = toks[0].lower().lstrip("@")
+                rest_reason = " ".join(toks[1:]).strip()
                 if first in ("win", "loss", "be"):
-                    out = cmd_close(first)
+                    out = cmd_close(first, reason=rest_reason)
                 else:
                     try:
-                        out = cmd_close("price", float(first))
+                        out = cmd_close("price", float(first), reason=rest_reason)
                     except ValueError:
                         out = f"Unrecognised close argument: {toks[0]}. Use win/loss/be or a price."
         elif cmd == "pnl":
             out = cmd_pnl()
+        elif cmd == "current":
+            out = cmd_current()
+        elif cmd == "risk":
+            if len(toks) < 2:
+                out = "Usage: /risk <account> <pct>\nExample: /risk main 2  (sets 2% risk per trade)"
+            else:
+                try:
+                    out = cmd_risk(toks[0], float(toks[1]))
+                except ValueError:
+                    out = f"Bad pct value: {toks[1]}"
         else:
             out = f"Unknown account command: /{cmd}"
     except SystemExit as e:
@@ -376,13 +458,19 @@ def main() -> None:
         out = cmd_open(rest[0], rest[1], float(rest[2]), float(rest[3]),
                        float(rest[4]), float(rest[5]), rest[6], float(rest[7]))
     elif sub == "mirror":
-        out = cmd_mirror(rest[0])
+        lots = float(rest[1]) if len(rest) > 1 else None
+        out = cmd_mirror(rest[0], lots_override=lots)
     elif sub == "close":
         res = rest[0]
-        price = float(rest[1]) if len(rest) > 1 else None
-        out = cmd_close(res, price)
+        price = float(rest[1]) if (len(rest) > 1 and res == "price") else None
+        reason = " ".join(rest[2:]) if (len(rest) > 2 and res == "price") else " ".join(rest[1:])
+        out = cmd_close(res, price, reason=reason)
     elif sub == "pnl":
         out = cmd_pnl()
+    elif sub == "current":
+        out = cmd_current()
+    elif sub == "risk":
+        out = cmd_risk(rest[0], float(rest[1]))
     else:
         sys.exit(f"unknown subcommand: {sub}")
 

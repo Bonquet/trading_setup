@@ -32,8 +32,10 @@ ROOT = Path(__file__).resolve().parents[1]
 LEVELS = ROOT / "data" / "cache" / "levels.json"
 OUT = ROOT / "data" / "cache" / "signal.json"
 PRIMARY_TF = "H4"
+STOP_TF = "H1"           # use H1 swing for SL → tighter stop, bigger lot
 HTF = "D1"
-ACCOUNT_RISK_PCT = 0.01   # 1%
+DEFAULT_RISK_PCT = 0.01  # 1% (overridable via CLI arg)
+SL_ATR_BUFFER = 0.5      # multiples of H1 ATR added past the swing
 
 
 def no_trade(reason: str, data: dict) -> None:
@@ -68,7 +70,12 @@ def main() -> None:
     wr = tf["williams_r14"]
     k, d = tf["stoch_k"], tf["stoch_d"]
     close = tf["last_close"]
-    swing_h, swing_l = tf["last_swing_high"], tf["last_swing_low"]
+    # SL anchored to H1 swing (tighter than H4 swing → bigger lot at same risk %)
+    h1 = data.get("timeframes", {}).get(STOP_TF) or {}
+    h1_swing_h = h1.get("last_swing_high") or tf["last_swing_high"]
+    h1_swing_l = h1.get("last_swing_low") or tf["last_swing_low"]
+    h1_atr = h1.get("atr14") or 5.0
+    swing_h, swing_l = h1_swing_h, h1_swing_l
 
     # Filter: sideways / misaligned
     if pos_d1 == "inside_channel" or pos_h4 == "inside_channel":
@@ -92,7 +99,7 @@ def main() -> None:
     if direction == "BUY":
         if not swing_l:
             no_trade("no swing low available for SL", data)
-        sl = swing_l - 0.5  # few pips below
+        sl = swing_l - h1_atr * SL_ATR_BUFFER  # below H1 swing low + ATR buffer
         risk = entry - sl
         if risk <= 0:
             no_trade("entry not above swing low — invalid SL distance", data)
@@ -109,7 +116,7 @@ def main() -> None:
     else:  # SELL
         if not swing_h:
             no_trade("no swing high available for SL", data)
-        sl = swing_h + 0.5
+        sl = swing_h + h1_atr * SL_ATR_BUFFER  # above H1 swing high + ATR buffer
         risk = sl - entry
         if risk <= 0:
             no_trade("entry not below swing high — invalid SL distance", data)
@@ -127,12 +134,15 @@ def main() -> None:
     if rr < 2.0:
         no_trade(f"RR {rr:.2f} < 2.0 — no room to pivot target", data)
 
-    # Position sizing requires account size; default to $10k, caller can override via CLI
+    # Position sizing — caller passes account size (USD) and risk pct (0.01 = 1%)
     account = float(sys.argv[1]) if len(sys.argv) > 1 else 10000.0
+    risk_pct = float(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_RISK_PCT
     # XAUUSD: 1 lot = 100 oz, ~$1 per 0.01 price move per lot = $100 per $1 move per lot
-    risk_usd = account * ACCOUNT_RISK_PCT
+    risk_usd = account * risk_pct
     dollars_per_price_per_lot = 100.0
-    lots = round(risk_usd / (risk * dollars_per_price_per_lot), 2)
+    lots_raw = risk_usd / (risk * dollars_per_price_per_lot)
+    # 0.01-step rounding (broker minimum); never round to zero — floor to 0.01
+    lots = max(0.01, round(lots_raw, 2))
 
     sig = {
         "decision": "Valid Trade",
@@ -146,8 +156,10 @@ def main() -> None:
         "risk_per_unit": round(risk, 2),
         "rr_to_tp2": round(rr, 2),
         "account": account,
-        "risk_pct": ACCOUNT_RISK_PCT,
+        "risk_pct": risk_pct,
+        "risk_usd": round(risk_usd, 2),
         "lots": lots,
+        "stop_distance": round(risk, 2),
         "confluence": {
             "D1_position": pos_d1,
             "H4_position": pos_h4,

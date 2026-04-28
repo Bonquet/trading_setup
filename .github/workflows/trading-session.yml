@@ -16,6 +16,9 @@ on:
         required: false
         default: "10000"
 
+permissions:
+  contents: write
+
 concurrency:
   group: trading-session
   cancel-in-progress: false

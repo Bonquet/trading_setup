@@ -11,6 +11,9 @@ on:
         required: false
         default: "7"
 
+permissions:
+  contents: write
+
 concurrency:
   group: weekly-review
   cancel-in-progress: false
