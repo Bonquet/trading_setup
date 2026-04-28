@@ -3,30 +3,25 @@
   "accounts": {
     "main": {
       "balance": 5000.0,
+      "initial_balance": 5000.0,
       "currency": "USD",
+      "prop_firm": true,
+      "max_loss_usd": 200.0,
+      "max_risk_per_trade_usd": 20.0,
+      "style": "intraday",
       "risk_pct": 1.0
     },
     "savings": {
       "balance": 10000.0,
+      "initial_balance": 10000.0,
       "currency": "USD",
+      "prop_firm": true,
+      "max_loss_usd": 400.0,
+      "max_risk_per_trade_usd": 40.0,
+      "style": "intraday",
       "risk_pct": 1.0
     }
   },
-  "open": [
-    {
-      "id": "20260428T0717Z",
-      "account": "main",
-      "direction": "SELL",
-      "entry": 4632.94,
-      "sl": 4707.24,
-      "tp1": 4484.33,
-      "tp2": 4484.33,
-      "lots": 0.01,
-      "risk_usd": 50.0,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams",
-      "opened_at": "2026-04-28T07:17Z"
-    }
-  ],
+  "open": [],
   "closed": []
 }

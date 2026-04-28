@@ -31,11 +31,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 LEVELS = ROOT / "data" / "cache" / "levels.json"
 OUT = ROOT / "data" / "cache" / "signal.json"
-PRIMARY_TF = "H4"
-STOP_TF = "H1"           # use H1 swing for SL → tighter stop, bigger lot
-HTF = "D1"
 DEFAULT_RISK_PCT = 0.01  # 1% (overridable via CLI arg)
-SL_ATR_BUFFER = 0.5      # multiples of H1 ATR added past the swing
+
+# Style → (PRIMARY_TF, HTF_BIAS, STOP_TF, SL_ATR_BUFFER)
+# - swing: H4 setup, D1 bias, H1 stop          (50-100pt stops, 1-3 day holds)
+# - intraday: H1 setup, H4 bias, M15 stop      (15-30pt stops, 1-6h holds; prop-firm friendly)
+# - scalp: M15 setup, H1 bias, M15 ATR stop    (5-15pt stops, <1h holds; very twitchy)
+STYLES = {
+    "swing":    {"primary": "H4",  "htf": "D1", "stop_tf": "H1",  "atr_buf": 0.5,  "wr_long": -20,  "wr_short": -80, "stoch_long": 60,  "stoch_short": 40},
+    "intraday": {"primary": "H1",  "htf": "H4", "stop_tf": "M15", "atr_buf": 0.75, "wr_long": -25,  "wr_short": -75, "stoch_long": 55,  "stoch_short": 45},
+    "scalp":    {"primary": "M15", "htf": "H1", "stop_tf": "M15", "atr_buf": 1.5,  "wr_long": -30,  "wr_short": -70, "stoch_long": 50,  "stoch_short": 50},
+}
+DEFAULT_STYLE = "intraday"
 
 
 def no_trade(reason: str, data: dict) -> None:
@@ -50,6 +57,19 @@ def main() -> None:
         sys.exit(f"Missing {LEVELS}. Run scripts/compute_levels.py first.")
     data = json.loads(LEVELS.read_text())
 
+    # Style flag (--style=intraday|swing|scalp). Default: intraday.
+    style = DEFAULT_STYLE
+    for arg in sys.argv:
+        if arg.startswith("--style="):
+            style = arg.split("=", 1)[1].lower()
+    if style not in STYLES:
+        sys.exit(f"Unknown style '{style}'. Choose: {', '.join(STYLES)}")
+    cfg = STYLES[style]
+    PRIMARY_TF = cfg["primary"]
+    HTF = cfg["htf"]
+    STOP_TF = cfg["stop_tf"]
+    SL_ATR_BUFFER = cfg["atr_buf"]
+
     spot = data.get("spot")
     tf = data.get("timeframes", {}).get(PRIMARY_TF)
     htf = data.get("timeframes", {}).get(HTF)
@@ -58,40 +78,41 @@ def main() -> None:
     if not tf or not htf:
         no_trade(f"missing {PRIMARY_TF} or {HTF} data", data)
 
-    # Required fields
+    # Required fields on primary TF
     required = ("position_vs_channel", "williams_r14", "stoch_k", "stoch_d",
                 "last_close", "last_swing_high", "last_swing_low", "atr14")
     for f in required:
         if tf.get(f) is None:
-            no_trade(f"H4 missing field {f}", data)
+            no_trade(f"{PRIMARY_TF} missing field {f}", data)
 
-    pos_h4 = tf["position_vs_channel"]
-    pos_d1 = htf["position_vs_channel"]
+    pos_p = tf["position_vs_channel"]      # primary TF position
+    pos_b = htf["position_vs_channel"]     # bias TF position
     wr = tf["williams_r14"]
     k, d = tf["stoch_k"], tf["stoch_d"]
     close = tf["last_close"]
-    # SL anchored to H1 swing (tighter than H4 swing → bigger lot at same risk %)
-    h1 = data.get("timeframes", {}).get(STOP_TF) or {}
-    h1_swing_h = h1.get("last_swing_high") or tf["last_swing_high"]
-    h1_swing_l = h1.get("last_swing_low") or tf["last_swing_low"]
-    h1_atr = h1.get("atr14") or 5.0
-    swing_h, swing_l = h1_swing_h, h1_swing_l
+    # SL anchored to STOP_TF swing
+    stop_data = data.get("timeframes", {}).get(STOP_TF) or {}
+    stop_swing_h = stop_data.get("last_swing_high") or tf["last_swing_high"]
+    stop_swing_l = stop_data.get("last_swing_low") or tf["last_swing_low"]
+    stop_atr = stop_data.get("atr14") or 5.0
+    swing_h, swing_l = stop_swing_h, stop_swing_l
 
-    # Filter: sideways / misaligned
-    if pos_d1 == "inside_channel" or pos_h4 == "inside_channel":
-        no_trade("sideways — price inside 50 EMA channel on D1 or H4", data)
-    if pos_d1 != pos_h4:
-        no_trade(f"bias mismatch: D1 {pos_d1} vs H4 {pos_h4}", data)
+    # Filter: sideways / misaligned (using primary + bias)
+    if pos_b == "inside_channel" or pos_p == "inside_channel":
+        no_trade(f"sideways — price inside 50 EMA channel on {HTF} or {PRIMARY_TF}", data)
+    if pos_b != pos_p:
+        no_trade(f"bias mismatch: {HTF} {pos_b} vs {PRIMARY_TF} {pos_p}", data)
 
     direction = None
-    if pos_h4 == "above_channel" and wr > -20 and k > d and k > 60:
+    if pos_p == "above_channel" and wr > cfg["wr_long"] and k > d and k > cfg["stoch_long"]:
         direction = "BUY"
-    elif pos_h4 == "below_channel" and wr < -80 and k < d and k < 40:
+    elif pos_p == "below_channel" and wr < cfg["wr_short"] and k < d and k < cfg["stoch_short"]:
         direction = "SELL"
     else:
         no_trade(
-            f"momentum conditions not met (pos={pos_h4}, Williams%R={wr:.1f}, "
-            f"StochK={k:.1f}, StochD={d:.1f})", data,
+            f"momentum conditions not met on {PRIMARY_TF} (pos={pos_p}, Williams%R={wr:.1f}, "
+            f"StochK={k:.1f}, StochD={d:.1f}; thresholds wr_long>{cfg['wr_long']} k>{cfg['stoch_long']} "
+            f"or wr_short<{cfg['wr_short']} k<{cfg['stoch_short']})", data,
         )
 
     # Entry = current spot bid/ask where possible, else H4 close
@@ -99,7 +120,7 @@ def main() -> None:
     if direction == "BUY":
         if not swing_l:
             no_trade("no swing low available for SL", data)
-        sl = swing_l - h1_atr * SL_ATR_BUFFER  # below H1 swing low + ATR buffer
+        sl = swing_l - stop_atr * SL_ATR_BUFFER
         risk = entry - sl
         if risk <= 0:
             no_trade("entry not above swing low — invalid SL distance", data)
@@ -116,7 +137,7 @@ def main() -> None:
     else:  # SELL
         if not swing_h:
             no_trade("no swing high available for SL", data)
-        sl = swing_h + h1_atr * SL_ATR_BUFFER  # above H1 swing high + ATR buffer
+        sl = swing_h + stop_atr * SL_ATR_BUFFER
         risk = sl - entry
         if risk <= 0:
             no_trade("entry not below swing high — invalid SL distance", data)
@@ -134,20 +155,52 @@ def main() -> None:
     if rr < 2.0:
         no_trade(f"RR {rr:.2f} < 2.0 — no room to pivot target", data)
 
-    # Position sizing — caller passes account size (USD) and risk pct (0.01 = 1%)
+    # Position sizing — caller passes account size, risk pct, and (optional) dollar cap
     account = float(sys.argv[1]) if len(sys.argv) > 1 else 10000.0
     risk_pct = float(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_RISK_PCT
-    # XAUUSD: 1 lot = 100 oz, ~$1 per 0.01 price move per lot = $100 per $1 move per lot
-    risk_usd = account * risk_pct
+    # max_risk_usd is a hard $-cap (prop firm DD-buffer aware). 0 means "no cap, use risk_pct only".
+    max_risk_usd = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
+
+    risk_pct_usd = account * risk_pct
+    if max_risk_usd > 0:
+        budget_usd = min(risk_pct_usd, max_risk_usd)
+        cap_source = "prop $-cap" if max_risk_usd <= risk_pct_usd else f"{risk_pct*100:.1f}% of balance"
+    else:
+        budget_usd = risk_pct_usd
+        cap_source = f"{risk_pct*100:.1f}% of balance"
+
+    # XAUUSD: 1 lot = 100 oz, $100 per $1 price move per standard lot.
     dollars_per_price_per_lot = 100.0
-    lots_raw = risk_usd / (risk * dollars_per_price_per_lot)
-    # 0.01-step rounding (broker minimum); never round to zero — floor to 0.01
-    lots = max(0.01, round(lots_raw, 2))
+    lots_raw = budget_usd / (risk * dollars_per_price_per_lot)
+    lots = round(lots_raw, 2)
+    # Broker minimum is 0.01 lot. If even minimum exceeds the budget, refuse the trade
+    # (this is the prop-firm safety net — wide stop = no trade).
+    if lots < 0.01:
+        actual_min_risk = 0.01 * risk * dollars_per_price_per_lot
+        no_trade(
+            f"stop too wide for risk budget ({cap_source} = ${budget_usd:.2f}); "
+            f"minimum 0.01 lot would risk ${actual_min_risk:.2f} on {risk:.1f}-pt stop. "
+            f"Skip this setup — wait for a tighter structure.", data,
+        )
+    # Floor to 0.01; check final overshoot vs the dollar cap
+    if lots < 0.01:
+        lots = 0.01
+    risk_usd = lots * risk * dollars_per_price_per_lot
+    # Hard prop cap: refuse if even minimum lot risks > 1.25× the dollar cap
+    if max_risk_usd > 0 and risk_usd > max_risk_usd * 1.25:
+        no_trade(
+            f"min lot risks ${risk_usd:.2f} > 1.25× cap ${max_risk_usd:.2f} "
+            f"on {risk:.1f}-pt stop ({style}). Stop too wide for prop limits — wait.", data,
+        )
 
     sig = {
         "decision": "Valid Trade",
         "instrument": "XAUUSD",
-        "strategy": "50 EMA Williams",
+        "style": style,
+        "primary_tf": PRIMARY_TF,
+        "bias_tf": HTF,
+        "stop_tf": STOP_TF,
+        "strategy": f"50 EMA Williams ({style})",
         "direction": direction,
         "entry": round(entry, 2),
         "stop_loss": round(sl, 2),
@@ -158,11 +211,13 @@ def main() -> None:
         "account": account,
         "risk_pct": risk_pct,
         "risk_usd": round(risk_usd, 2),
+        "max_risk_cap_usd": max_risk_usd,
+        "cap_source": cap_source,
         "lots": lots,
         "stop_distance": round(risk, 2),
         "confluence": {
-            "D1_position": pos_d1,
-            "H4_position": pos_h4,
+            f"{HTF}_position": pos_b,
+            f"{PRIMARY_TF}_position": pos_p,
             "williams_r14": round(wr, 1),
             "stoch_k": round(k, 1),
             "stoch_d": round(d, 1),

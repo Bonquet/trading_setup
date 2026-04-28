@@ -96,11 +96,11 @@ jobs:
               python scripts/compute_levels.py >/dev/null 2>&1 || true
               python scripts/accounts.py whatsapp "$CMD" "$ARGS"
               ;;
-            accounts|balance|active|risk|took|close|pnl)
+            accounts|balance|active|risk|took|close|pnl|buffer|maxrisk|style)
               python scripts/accounts.py whatsapp "$CMD" "$ARGS"
               ;;
             help|"")
-              python scripts/notify_whatsapp.py "Commands: /health /london /ny /best /current /summary /accounts /balance /active /risk /took /close /pnl /help"
+              python scripts/notify_whatsapp.py "Commands: /health /london /ny /best /current /summary /accounts /balance /active /risk /buffer /maxrisk /style /took /close /pnl /help"
               ;;
             *)
               python scripts/notify_whatsapp.py "Unknown command: /$CMD — try /help"

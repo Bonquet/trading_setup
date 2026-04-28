@@ -28,6 +28,7 @@ exports.handler = async function (context, event, callback) {
   const ALLOWED = new Set([
     "health", "london", "ny", "best", "summary",
     "accounts", "balance", "active", "risk", "took", "close", "current", "pnl",
+    "buffer", "maxrisk", "style",
   ]);
   const HELP_TEXT =
     "XAU bot commands:\n" +
@@ -39,14 +40,19 @@ exports.handler = async function (context, event, callback) {
     "/current  show open trades\n" +
     "/summary  weekly review\n" +
     "— accounts —\n" +
-    "/accounts                list all\n" +
-    "/balance <name> <amt>    set balance\n" +
-    "/active <name>           set active acct\n" +
-    "/risk <name> <pct>       set risk %\n" +
-    "/took <acct> [lots]      mirror last trade\n" +
+    "/accounts                  list all\n" +
+    "/balance <name> <amt>      set balance\n" +
+    "/active <name>             set active\n" +
+    "/risk <name> <pct>         set risk %\n" +
+    "— prop firm —\n" +
+    "/buffer <name> <usd>       DD limit ($)\n" +
+    "/maxrisk <name> <usd>      cap risk/trade ($)\n" +
+    "/style <name> <s|i|s>      swing|intraday|scalp\n" +
+    "— trade —\n" +
+    "/took <acct> [lots]        mirror last trade\n" +
     "/close win|loss|be|<px> [reason]\n" +
-    "/pnl                     P&L report\n" +
-    "/help     this message";
+    "/pnl                       P&L report\n" +
+    "/help                      this message";
 
   if (!word || word === "help") {
     twiml.message(HELP_TEXT);

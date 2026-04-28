@@ -98,6 +98,19 @@ def fmt_money(v: float) -> str:
 
 # ---------- commands ----------
 
+def _dd_status(acc: dict) -> str:
+    """Format DD buffer remaining for a prop firm account."""
+    max_loss = acc.get("max_loss_usd", 0.0)
+    if not max_loss:
+        return ""
+    initial = acc.get("initial_balance", acc.get("balance", 0))
+    used = max(0.0, initial - acc.get("balance", initial))
+    remaining = max_loss - used
+    pct_used = (used / max_loss * 100) if max_loss else 0
+    warn = " ⚠️" if pct_used > 70 else ""
+    return f" | DD ${remaining:,.0f}/${max_loss:,.0f} left ({pct_used:.0f}% used){warn}"
+
+
 def cmd_list() -> str:
     data = load()
     if not data["accounts"]:
@@ -105,7 +118,10 @@ def cmd_list() -> str:
     lines = ["Accounts:"]
     for name, acc in data["accounts"].items():
         marker = " (active)" if name == data["active"] else ""
-        lines.append(f"• {name}: ${acc['balance']:,.2f} {acc.get('currency','USD')}{marker}")
+        style = acc.get("style", "intraday")
+        cap = acc.get("max_risk_per_trade_usd", 0)
+        cap_str = f" | cap ${cap:,.0f}/tr" if cap else ""
+        lines.append(f"• {name}: ${acc['balance']:,.2f} [{style}]{cap_str}{_dd_status(acc)}{marker}")
     # per-account P&L rollup
     pnl_by: dict[str, float] = {k: 0.0 for k in data["accounts"]}
     for t in data["closed"]:
@@ -127,15 +143,52 @@ def cmd_list() -> str:
 
 def cmd_set(name: str, balance: float, currency: str = "USD") -> str:
     data = load()
-    existing = data["accounts"].get(name)
-    rp = (existing or {}).get("risk_pct", 1.0)
-    data["accounts"][name] = {"balance": float(balance), "currency": currency, "risk_pct": rp}
+    existing = data["accounts"].get(name) or {}
+    new = {
+        "balance": float(balance),
+        "initial_balance": existing.get("initial_balance", float(balance)),
+        "currency": currency,
+        "prop_firm": existing.get("prop_firm", False),
+        "max_loss_usd": existing.get("max_loss_usd", 0.0),
+        "max_risk_per_trade_usd": existing.get("max_risk_per_trade_usd", 0.0),
+        "style": existing.get("style", "intraday"),
+        "risk_pct": existing.get("risk_pct", 1.0),
+    }
+    data["accounts"][name] = new
     if data["active"] is None:
         data["active"] = name
     save(data)
     verb = "updated" if existing else "created"
     active = " (now active)" if data["active"] == name and not existing else ""
-    return f"Account {verb}: {name} = ${balance:,.2f} {currency} (risk {rp}%){active}"
+    return f"Account {verb}: {name} = ${balance:,.2f} {currency} (risk {new['risk_pct']}%, style {new['style']}){active}"
+
+
+def cmd_buffer(name: str, max_loss: float) -> str:
+    data = load()
+    require_account(data, name)
+    data["accounts"][name]["max_loss_usd"] = float(max_loss)
+    data["accounts"][name]["prop_firm"] = max_loss > 0
+    save(data)
+    return f"DD buffer set: {name} max loss = ${max_loss:,.2f} (prop_firm={'on' if max_loss>0 else 'off'})"
+
+
+def cmd_maxrisk(name: str, max_risk: float) -> str:
+    data = load()
+    require_account(data, name)
+    data["accounts"][name]["max_risk_per_trade_usd"] = float(max_risk)
+    save(data)
+    return f"Max risk per trade: {name} = ${max_risk:,.2f}"
+
+
+def cmd_style(name: str, style: str) -> str:
+    data = load()
+    require_account(data, name)
+    style = style.lower().strip()
+    if style not in ("swing", "intraday", "scalp"):
+        return f"Unknown style '{style}'. Choose: swing | intraday | scalp"
+    data["accounts"][name]["style"] = style
+    save(data)
+    return f"Style set: {name} = {style}"
 
 
 def cmd_risk(name: str, pct: float) -> str:
@@ -334,7 +387,7 @@ def cmd_pnl() -> str:
         losses = sum(1 for t in closed if t.get("status") == "loss")
         be = sum(1 for t in closed if t.get("status") == "breakeven")
         total += pnl
-        lines.append(f"• {name}: {fmt_money(pnl)} ({wins}W/{losses}L/{be}BE, {len(closed)} closed) → ${acc['balance']:,.2f}")
+        lines.append(f"• {name}: {fmt_money(pnl)} ({wins}W/{losses}L/{be}BE, {len(closed)} closed) → ${acc['balance']:,.2f}{_dd_status(acc)}")
     lines.append("")
     lines.append(f"Total realized: {fmt_money(total)}")
     if data["open"]:
@@ -412,6 +465,21 @@ def handle_whatsapp(command: str, raw_args: str, with_notify: bool = True) -> No
                     out = cmd_risk(toks[0], float(toks[1]))
                 except ValueError:
                     out = f"Bad pct value: {toks[1]}"
+        elif cmd == "buffer":
+            if len(toks) < 2:
+                out = "Usage: /buffer <account> <max_loss_usd>\nExample: /buffer main 200  (FTMO $5k = $200 daily DD)"
+            else:
+                out = cmd_buffer(toks[0], float(toks[1]))
+        elif cmd == "maxrisk":
+            if len(toks) < 2:
+                out = "Usage: /maxrisk <account> <usd>\nExample: /maxrisk main 20  (cap risk at $20/trade)"
+            else:
+                out = cmd_maxrisk(toks[0], float(toks[1]))
+        elif cmd == "style":
+            if len(toks) < 2:
+                out = "Usage: /style <account> <swing|intraday|scalp>\nExample: /style main intraday"
+            else:
+                out = cmd_style(toks[0], toks[1])
         else:
             out = f"Unknown account command: /{cmd}"
     except SystemExit as e:
