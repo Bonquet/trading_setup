@@ -211,17 +211,29 @@ def cmd_active(name: str) -> str:
 
 
 def cmd_open(account: str, direction: str, entry: float, sl: float,
-             tp1: float, tp2: float, strategy: str, risk_pct: float) -> str:
-    """Called from run_auto.py when a valid signal fires. Creates an open trade record."""
+             tp1: float, tp2: float, strategy: str, risk_pct: float,
+             lots: float | None = None, risk_usd: float | None = None) -> str:
+    """Called from run_auto.py when a valid signal fires. Creates an open trade record.
+    If lots and risk_usd are provided, uses them directly (preserves engine's prop-cap math).
+    Otherwise computes from balance × risk_pct, also clamped by account's max_risk_per_trade_usd.
+    """
     data = load()
     require_account(data, account)
-    bal = data["accounts"][account]["balance"]
-    risk_usd = round(bal * risk_pct / 100.0, 2)
+    acc = data["accounts"][account]
+    bal = acc["balance"]
+    cap = acc.get("max_risk_per_trade_usd", 0.0)
     stop_dist = abs(entry - sl)
     if stop_dist <= 0:
         sys.exit("Stop distance must be > 0")
-    # lots such that (stop_dist * CONTRACT_SIZE * lots) == risk_usd
-    lots = round(risk_usd / (stop_dist * CONTRACT_SIZE), 2)
+
+    if lots is not None and risk_usd is not None:
+        lots = float(lots)
+        risk_usd = float(risk_usd)
+    else:
+        risk_pct_usd = bal * risk_pct / 100.0
+        budget = min(risk_pct_usd, cap) if cap > 0 else risk_pct_usd
+        lots = max(0.01, round(budget / (stop_dist * CONTRACT_SIZE), 2))
+        risk_usd = round(lots * stop_dist * CONTRACT_SIZE, 2)
     trade_id = now_iso().replace(":", "").replace("-", "")
     trade = {
         "id": trade_id,
@@ -522,9 +534,12 @@ def main() -> None:
         out = cmd_active(rest[0])
     elif sub == "open":
         if len(rest) < 8:
-            sys.exit("Usage: open <account> <dir> <entry> <sl> <tp1> <tp2> <strategy> <risk_pct>")
+            sys.exit("Usage: open <account> <dir> <entry> <sl> <tp1> <tp2> <strategy> <risk_pct> [<lots> <risk_usd>]")
+        lots_arg = float(rest[8]) if len(rest) > 8 else None
+        risk_usd_arg = float(rest[9]) if len(rest) > 9 else None
         out = cmd_open(rest[0], rest[1], float(rest[2]), float(rest[3]),
-                       float(rest[4]), float(rest[5]), rest[6], float(rest[7]))
+                       float(rest[4]), float(rest[5]), rest[6], float(rest[7]),
+                       lots=lots_arg, risk_usd=risk_usd_arg)
     elif sub == "mirror":
         lots = float(rest[1]) if len(rest) > 1 else None
         out = cmd_mirror(rest[0], lots_override=lots)

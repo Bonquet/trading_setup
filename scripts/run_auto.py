@@ -236,13 +236,17 @@ def main() -> None:
 
     append_journal(sig, session)
 
-    # Record open trade against active account (if one is configured)
+    # Record open trade against active account (if one is configured).
+    # Pass the engine's exact lots+risk_usd so the persisted record matches
+    # the message (prop $-cap respected end-to-end).
     if acct_name != "default":
         try:
             subprocess.run(
                 [py, str(SCRIPTS / "accounts.py"), "open",
                  acct_name, sig["direction"], str(sig["entry"]), str(sig["stop_loss"]),
-                 str(sig["tp1"]), str(sig["tp2"]), sig["strategy"], str(risk_pct_decimal * 100)],
+                 str(sig["tp1"]), str(sig["tp2"]), sig["strategy"],
+                 str(risk_pct_decimal * 100),
+                 str(sig.get("lots", 0.01)), str(sig.get("risk_usd", 0.0))],
                 cwd=str(ROOT), check=False,
             )
         except Exception as e:  # noqa: BLE001

@@ -22,21 +22,6 @@
       "risk_pct": 1.0
     }
   },
-  "open": [
-    {
-      "id": "20260428T0810Z",
-      "account": "main",
-      "direction": "SELL",
-      "entry": 4621.64,
-      "sl": 4645.23,
-      "tp1": 4574.45,
-      "tp2": 4574.45,
-      "lots": 0.02,
-      "risk_usd": 50.0,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (intraday)",
-      "opened_at": "2026-04-28T08:10Z"
-    }
-  ],
+  "open": [],
   "closed": []
 }
