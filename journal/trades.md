@@ -27,3 +27,11 @@ Format: one trade per block, newest at top. Claude appends after user confirms a
 ## Trades
 
 <!-- Append new entries above this line -->
+
+### 2026-04-28 07:17 UTC — SELL @ 4632.94
+- Session: manual
+- Strategy: 50 EMA Williams
+- SL: 4707.24 | TP1: 4484.33 | TP2: 4484.33
+- RR: 2.0R | Size: 0.01 lots | Risk: 1% of $5000.0
+- Confluence: {'D1_position': 'below_channel', 'H4_position': 'below_channel', 'williams_r14': -90.1, 'stoch_k': 16.9, 'stoch_d': 21.2}
+- Outcome: pending
