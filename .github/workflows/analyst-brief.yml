@@ -1,0 +1,119 @@
+name: Analyst Brief Sender
+
+# Dispatched by remote routines. Combines:
+#   1. Agent's deeper analysis (Pullback view, news, judgment) — passed as `analysis` input
+#   2. Bot's full mechanical pipeline output (live data, signal, sizing) — generated here
+# Sends both as one cohesive WhatsApp message.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "morning | weekly"
+        required: true
+        default: "morning"
+      analysis:
+        description: "Agent's analysis text (markdown). Goes at top of the WhatsApp."
+        required: true
+      session_label:
+        description: "Optional label for journal/log (e.g. 'morning-routine')"
+        required: false
+        default: "morning-routine"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: analyst-brief
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GOLDAPI_KEY: ${{ secrets.GOLDAPI_KEY }}
+      TWELVEDATA_KEY: ${{ secrets.TWELVEDATA_KEY }}
+      WHATSAPP_BACKEND: twilio
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_API_KEY_SID: ${{ secrets.TWILIO_API_KEY_SID }}
+      TWILIO_API_KEY_SECRET: ${{ secrets.TWILIO_API_KEY_SECRET }}
+      TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
+      TWILIO_TO: ${{ secrets.TWILIO_TO }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run bot pipeline (morning mode only)
+        if: ${{ inputs.mode == 'morning' }}
+        id: pipe
+        run: |
+          set -e
+          python scripts/fetch_gold.py
+          python scripts/compute_levels.py
+          # Read active account config
+          BAL=$(python -c "import json; d=json.load(open('data/accounts.json')); a=d['accounts'][d['active']]; print(a['balance'])")
+          PCT=$(python -c "import json; d=json.load(open('data/accounts.json')); a=d['accounts'][d['active']]; print(a.get('risk_pct',1.0)/100)")
+          CAP=$(python -c "import json; d=json.load(open('data/accounts.json')); a=d['accounts'][d['active']]; print(a.get('max_risk_per_trade_usd',0))")
+          STYLE=$(python -c "import json; d=json.load(open('data/accounts.json')); a=d['accounts'][d['active']]; print(a.get('style','swing'))")
+          ACTIVE=$(python -c "import json; d=json.load(open('data/accounts.json')); print(d['active'])")
+          # Run signal engine; capture exit code (0=signal, 10=no trade)
+          set +e
+          SIGNAL_OUT=$(python scripts/generate_signal.py "$BAL" "$PCT" "$CAP" --style="$STYLE" 2>&1)
+          CODE=$?
+          set -e
+          echo "signal_exit=$CODE" >> "$GITHUB_OUTPUT"
+          # Persist mechanical output for the message-build step
+          {
+            echo "BOT_OUT<<EOF"
+            echo "$SIGNAL_OUT"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+          echo "ACTIVE=$ACTIVE" >> "$GITHUB_ENV"
+          echo "BAL=$BAL" >> "$GITHUB_ENV"
+
+      - name: Run weekly stats (weekly mode only)
+        if: ${{ inputs.mode == 'weekly' }}
+        run: |
+          python scripts/weekly_stats.py --days 7
+
+      - name: Compose and send WhatsApp
+        env:
+          MODE: ${{ inputs.mode }}
+          ANALYSIS: ${{ inputs.analysis }}
+          SESSION: ${{ inputs.session_label }}
+        run: |
+          set -e
+          if [ "$MODE" = "morning" ]; then
+            # Compose: agent's analysis + bot's mechanical output
+            FULL="$ANALYSIS
+
+--- bot mechanical signal ---
+$BOT_OUT"
+          else
+            STATS=$(cat data/cache/weekly_stats.json | python -c "import sys,json; d=json.load(sys.stdin); print('Total: %d trades, %d wins, %d losses, win rate %.1f%%, total R %s' % (d.get('total_trades',0), d.get('wins',0), d.get('losses',0), d.get('win_rate_pct',0), d.get('total_r',0)))")
+            FULL="$ANALYSIS
+
+--- weekly stats ---
+$STATS"
+          fi
+          # Truncate to 1500 chars (Twilio single-message limit)
+          MSG=$(echo "$FULL" | head -c 1500)
+          python scripts/notify_whatsapp.py "$MSG"
+
+      - name: Commit any data/journal updates
+        if: always()
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/ journal/ 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "auto: ${{ inputs.session_label }} ${{ inputs.mode }} $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          else
+            echo "No changes to commit."
+          fi

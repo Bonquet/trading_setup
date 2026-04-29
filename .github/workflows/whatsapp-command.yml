@@ -101,7 +101,7 @@ jobs:
               python scripts/compute_levels.py >/dev/null 2>&1 || true
               python scripts/accounts.py whatsapp "$CMD" "$ARGS"
               ;;
-            accounts|balance|active|risk|took|close|pnl|buffer|maxrisk|style)
+            accounts|balance|active|risk|took|close|pnl|buffer|maxrisk|style|freeze|unfreeze)
               python scripts/accounts.py whatsapp "$CMD" "$ARGS"
               ;;
             help|"")

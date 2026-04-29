@@ -28,7 +28,7 @@ exports.handler = async function (context, event, callback) {
   const ALLOWED = new Set([
     "health", "london", "ny", "best", "summary",
     "accounts", "balance", "active", "risk", "took", "close", "current", "pnl",
-    "buffer", "maxrisk", "style",
+    "buffer", "maxrisk", "style", "freeze", "unfreeze",
   ]);
   const HELP_TEXT =
     "XAU bot commands:\n" +
@@ -48,6 +48,8 @@ exports.handler = async function (context, event, callback) {
     "/buffer <name> <usd>       DD limit ($)\n" +
     "/maxrisk <name> <usd>      cap risk/trade ($)\n" +
     "/style <name> <s|i|s>      swing|intraday|scalp\n" +
+    "/freeze <name>             block all trades on this acct\n" +
+    "/unfreeze <name>           re-enable trading\n" +
     "— trade —\n" +
     "/took <acct> [lots]        mirror last trade\n" +
     "/close win|loss|be|<px> [reason]\n" +

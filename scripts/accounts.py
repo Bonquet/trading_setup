@@ -121,7 +121,8 @@ def cmd_list() -> str:
         style = acc.get("style", "intraday")
         cap = acc.get("max_risk_per_trade_usd", 0)
         cap_str = f" | cap ${cap:,.0f}/tr" if cap else ""
-        lines.append(f"• {name}: ${acc['balance']:,.2f} [{style}]{cap_str}{_dd_status(acc)}{marker}")
+        frozen_str = " ❄️ FROZEN" if acc.get("frozen") else ""
+        lines.append(f"• {name}: ${acc['balance']:,.2f} [{style}]{cap_str}{_dd_status(acc)}{frozen_str}{marker}")
     # per-account P&L rollup
     pnl_by: dict[str, float] = {k: 0.0 for k in data["accounts"]}
     for t in data["closed"]:
@@ -180,6 +181,16 @@ def cmd_maxrisk(name: str, max_risk: float) -> str:
     return f"Max risk per trade: {name} = ${max_risk:,.2f}"
 
 
+def cmd_freeze(name: str, frozen: bool = True) -> str:
+    data = load()
+    require_account(data, name)
+    data["accounts"][name]["frozen"] = frozen
+    save(data)
+    word = "frozen" if frozen else "unfrozen"
+    extra = " — /took, /best signals, mirroring all blocked for this account." if frozen else ""
+    return f"Account {name} {word}.{extra}"
+
+
 def cmd_style(name: str, style: str) -> str:
     data = load()
     require_account(data, name)
@@ -220,6 +231,8 @@ def cmd_open(account: str, direction: str, entry: float, sl: float,
     data = load()
     require_account(data, account)
     acc = data["accounts"][account]
+    if acc.get("frozen"):
+        return f"REFUSED: account {account} is frozen. /unfreeze {account} to allow trades."
     bal = acc["balance"]
     cap = acc.get("max_risk_per_trade_usd", 0.0)
     stop_dist = abs(entry - sl)
@@ -259,23 +272,35 @@ def cmd_mirror(dest_account: str, lots_override: float | None = None) -> str:
     """Copy most recent open trade onto another account.
     If lots_override is given, use that exact lot size (broker-imposed sizing);
     otherwise re-size for the destination's balance + risk_pct.
+    Refuses if dest account is frozen OR if lot override would exceed the cap by >25%.
     """
     data = load()
     require_account(data, dest_account)
+    dest = data["accounts"][dest_account]
+    if dest.get("frozen"):
+        return f"REFUSED: {dest_account} is frozen. /unfreeze {dest_account} first."
     if not data["open"]:
         return "No open trade to mirror."
     src = data["open"][-1]
     if src["account"] == dest_account:
         return f"Most recent open trade is already on {dest_account}."
-    bal = data["accounts"][dest_account]["balance"]
+    bal = dest["balance"]
+    cap = dest.get("max_risk_per_trade_usd", 0.0)
     stop_dist = abs(src["entry"] - src["sl"])
     if lots_override is not None:
         lots = float(lots_override)
         risk_usd = round(lots * stop_dist * CONTRACT_SIZE, 2)
+        # Hard guard: refuse if custom lot blows past the prop cap by >25%
+        if cap > 0 and risk_usd > cap * 1.25:
+            return (f"REFUSED: lot override {lots} on {dest_account} would risk ${risk_usd:.2f}, "
+                    f"more than 1.25× cap ${cap:.2f}. Use a smaller lot or /maxrisk {dest_account} <new>.")
         custom_note = " (custom lot)"
     else:
-        risk_usd = round(bal * src["risk_pct"] / 100.0, 2)
-        lots = max(0.01, round(risk_usd / (stop_dist * CONTRACT_SIZE), 2))
+        risk_pct_usd = bal * src["risk_pct"] / 100.0
+        budget = min(risk_pct_usd, cap) if cap > 0 else risk_pct_usd
+        import math as _m
+        lots = max(0.01, _m.floor(budget / (stop_dist * CONTRACT_SIZE) * 100) / 100)
+        risk_usd = round(lots * stop_dist * CONTRACT_SIZE, 2)
         custom_note = ""
     trade_id = now_iso().replace(":", "").replace("-", "") + "_m"
     mirror = dict(src)
@@ -492,6 +517,16 @@ def handle_whatsapp(command: str, raw_args: str, with_notify: bool = True) -> No
                 out = "Usage: /style <account> <swing|intraday|scalp>\nExample: /style main intraday"
             else:
                 out = cmd_style(toks[0], toks[1])
+        elif cmd == "freeze":
+            if not toks:
+                out = "Usage: /freeze <account>\nBlocks new trades, mirrors, and signals on this account until /unfreeze."
+            else:
+                out = cmd_freeze(toks[0], frozen=True)
+        elif cmd == "unfreeze":
+            if not toks:
+                out = "Usage: /unfreeze <account>"
+            else:
+                out = cmd_freeze(toks[0], frozen=False)
         else:
             out = f"Unknown account command: /{cmd}"
     except SystemExit as e:
@@ -554,6 +589,16 @@ def main() -> None:
         out = cmd_current()
     elif sub == "risk":
         out = cmd_risk(rest[0], float(rest[1]))
+    elif sub == "freeze":
+        out = cmd_freeze(rest[0], frozen=True)
+    elif sub == "unfreeze":
+        out = cmd_freeze(rest[0], frozen=False)
+    elif sub == "buffer":
+        out = cmd_buffer(rest[0], float(rest[1]))
+    elif sub == "maxrisk":
+        out = cmd_maxrisk(rest[0], float(rest[1]))
+    elif sub == "style":
+        out = cmd_style(rest[0], rest[1])
     else:
         sys.exit(f"unknown subcommand: {sub}")
 
