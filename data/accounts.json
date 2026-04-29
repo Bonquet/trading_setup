@@ -2,7 +2,7 @@
   "active": "main",
   "accounts": {
     "main": {
-      "balance": 4923.84,
+      "balance": 5094.43,
       "initial_balance": 5000.0,
       "currency": "USD",
       "prop_firm": true,
@@ -13,7 +13,7 @@
       "risk_pct": 1.0
     },
     "savings": {
-      "balance": 9619.2,
+      "balance": 9957.85,
       "initial_balance": 10000.0,
       "currency": "USD",
       "prop_firm": true,
@@ -24,51 +24,7 @@
       "risk_pct": 1.0
     }
   },
-  "open": [
-    {
-      "id": "20260429T0703Z",
-      "account": "main",
-      "direction": "SELL",
-      "entry": 4586.03,
-      "sl": 4613.12,
-      "tp1": 4531.85,
-      "tp2": 4518.3,
-      "lots": 0.01,
-      "risk_usd": 27.09,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (swing)",
-      "opened_at": "2026-04-29T07:03Z"
-    },
-    {
-      "id": "20260429T0707Z_m",
-      "account": "savings",
-      "direction": "SELL",
-      "entry": 4586.03,
-      "sl": 4613.12,
-      "tp1": 4531.85,
-      "tp2": 4518.3,
-      "lots": 0.05,
-      "risk_usd": 135.45,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (swing)",
-      "opened_at": "2026-04-29T07:07Z",
-      "mirrored_from": "20260429T0703Z"
-    },
-    {
-      "id": "20260429T0906Z",
-      "account": "main",
-      "direction": "SELL",
-      "entry": 4575.24,
-      "sl": 4613.11,
-      "tp1": 4499.5,
-      "tp2": 4472.38,
-      "lots": 0.01,
-      "risk_usd": 37.87,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (swing)",
-      "opened_at": "2026-04-29T09:06Z"
-    }
-  ],
+  "open": [],
   "closed": [
     {
       "id": "20260428T1232Z",
@@ -129,6 +85,67 @@
       "r": -1.0,
       "status": "loss",
       "closed_at": "2026-04-29T03:38Z",
+      "reason": ""
+    },
+    {
+      "id": "20260429T0703Z",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 4586.03,
+      "sl": 4613.12,
+      "tp1": 4531.85,
+      "tp2": 4518.3,
+      "lots": 0.01,
+      "risk_usd": 27.09,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (swing)",
+      "opened_at": "2026-04-29T07:03Z",
+      "exit": 4518.3,
+      "pnl_usd": 67.73,
+      "r": 2.5,
+      "status": "win",
+      "closed_at": "2026-04-29T13:52Z",
+      "reason": ""
+    },
+    {
+      "id": "20260429T0707Z_m",
+      "account": "savings",
+      "direction": "SELL",
+      "entry": 4586.03,
+      "sl": 4613.12,
+      "tp1": 4531.85,
+      "tp2": 4518.3,
+      "lots": 0.05,
+      "risk_usd": 135.45,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (swing)",
+      "opened_at": "2026-04-29T07:07Z",
+      "mirrored_from": "20260429T0703Z",
+      "exit": 4518.3,
+      "pnl_usd": 338.65,
+      "r": 2.5,
+      "status": "win",
+      "closed_at": "2026-04-29T13:52Z",
+      "reason": ""
+    },
+    {
+      "id": "20260429T0906Z",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 4575.24,
+      "sl": 4613.11,
+      "tp1": 4499.5,
+      "tp2": 4472.38,
+      "lots": 0.01,
+      "risk_usd": 37.87,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (swing)",
+      "opened_at": "2026-04-29T09:06Z",
+      "exit": 4472.38,
+      "pnl_usd": 102.86,
+      "r": 2.72,
+      "status": "win",
+      "closed_at": "2026-04-29T13:52Z",
       "reason": ""
     }
   ]
