@@ -1,0 +1,54 @@
+name: Remote Brief Relay
+
+# Triggered when a remote routine pushes a brief into data/briefs/.
+# Forwards the file's contents to WhatsApp via Twilio (which has the secrets).
+
+on:
+  push:
+    paths:
+      - "data/briefs/**.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: brief-relay
+  cancel-in-progress: false
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      WHATSAPP_BACKEND: twilio
+      TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+      TWILIO_API_KEY_SID: ${{ secrets.TWILIO_API_KEY_SID }}
+      TWILIO_API_KEY_SECRET: ${{ secrets.TWILIO_API_KEY_SECRET }}
+      TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
+      TWILIO_TO: ${{ secrets.TWILIO_TO }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # need previous commit so we can diff
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Forward each new/modified brief to WhatsApp
+        run: |
+          set -e
+          # Find briefs added or modified in this push (diff vs HEAD~)
+          CHANGED=$(git diff --name-only HEAD~ HEAD -- 'data/briefs/*.md' || true)
+          if [ -z "$CHANGED" ]; then
+            echo "No brief changes detected in this push."
+            exit 0
+          fi
+          for f in $CHANGED; do
+            if [ ! -f "$f" ]; then
+              echo "Skipping deleted file $f"
+              continue
+            fi
+            echo "Forwarding $f"
+            # Truncate to 1500 chars to fit one Twilio message
+            BODY=$(head -c 1500 "$f")
+            python scripts/notify_whatsapp.py "$BODY"
+          done
