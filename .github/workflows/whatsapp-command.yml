@@ -92,6 +92,15 @@ jobs:
                 python scripts/run_auto.py manual 10000
               fi
               ;;
+            scalp)
+              # /scalp — force scalp style (M15 setup, M15 ATR stops, very short trades)
+              # regardless of account's saved style. On-demand only — does not affect cron.
+              STYLE_OVERRIDE=scalp python scripts/run_auto.py manual-scalp 10000
+              ;;
+            quick)
+              # /quick — alias for /scalp (intuitive name)
+              STYLE_OVERRIDE=scalp python scripts/run_auto.py manual-scalp 10000
+              ;;
             summary)
               python scripts/weekly_stats.py --days 7 --notify
               ;;
@@ -105,7 +114,7 @@ jobs:
               python scripts/accounts.py whatsapp "$CMD" "$ARGS"
               ;;
             help|"")
-              python scripts/notify_whatsapp.py "Commands: /health /london /ny /best /current /summary /accounts /balance /active /risk /buffer /maxrisk /style /took /close /pnl /help"
+              python scripts/notify_whatsapp.py "Commands: /health /london /ny /best /scalp /current /summary /accounts /balance /active /risk /buffer /maxrisk /style /took /close /pnl /freeze /unfreeze /help"
               ;;
             *)
               python scripts/notify_whatsapp.py "Unknown command: /$CMD — try /help"

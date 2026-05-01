@@ -26,7 +26,7 @@ exports.handler = async function (context, event, callback) {
   const args = parts.slice(1).join(" ");
 
   const ALLOWED = new Set([
-    "health", "london", "ny", "best", "summary",
+    "health", "london", "ny", "best", "scalp", "quick", "summary",
     "accounts", "balance", "active", "risk", "took", "close", "current", "pnl",
     "buffer", "maxrisk", "style", "freeze", "unfreeze",
   ]);
@@ -36,7 +36,8 @@ exports.handler = async function (context, event, callback) {
     "/health   check all APIs\n" +
     "/london   London brief now\n" +
     "/ny       NY brief now\n" +
-    "/best     scan for setup now\n" +
+    "/best     swing setup scan\n" +
+    "/scalp    quick M15 scalp setup scan\n" +
     "/current  show open trades\n" +
     "/summary  weekly review\n" +
     "— accounts —\n" +

@@ -180,7 +180,9 @@ def main() -> None:
     acct_name, acct = resolve_account("10000" if account_cli is None else account_cli)
     balance = float(acct.get("balance", 10000.0))
     risk_pct_decimal = float(acct.get("risk_pct", 1.0)) / 100.0
-    style = (acct.get("style") or "swing").lower()
+    # STYLE_OVERRIDE env var lets /scalp etc. force a different timeframe set
+    # without changing the account's saved style.
+    style = (os.environ.get("STYLE_OVERRIDE") or acct.get("style") or "swing").lower()
     # HIGH_CONVICTION=1 doubles the cap to high_conviction_risk_usd (set per account)
     high_conviction = os.environ.get("HIGH_CONVICTION") == "1"
     max_risk_usd = float(acct.get("max_risk_per_trade_usd", 0.0))
