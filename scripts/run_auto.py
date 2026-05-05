@@ -71,13 +71,23 @@ def build_message(sig: dict, session: str, levels: dict | None = None) -> str:
             swing = f", {stop_tf} swing {'low' if direction=='BUY' else 'high'} {round(sw,2)}"
 
     cap_src = sig.get("cap_source", "")
-    cap_str = f" — capped by {cap_src}" if cap_src else ""
+    cap_exceeded = sig.get("cap_exceeded", False)
+    cap_pct = sig.get("cap_exceeded_pct", 0)
+    cap_usd = sig.get("max_risk_cap_usd", 0)
+    if cap_exceeded:
+        cap_str = f" — ⚠️ EXCEEDS cap ${cap_usd:.0f} ({cap_pct:.0f}% of cap)"
+        warning_line = (f"\n⚠️ WARNING: 0.01 lot at this stop distance risks ${sig.get('risk_usd','?')}, "
+                        f"which is {cap_pct:.0f}% of your prop $-cap. "
+                        f"You can still take it (just smaller lot or skip), but be aware of the DD impact.\n")
+    else:
+        cap_str = f" — capped by {cap_src}" if cap_src else ""
+        warning_line = ""
 
     return (
         f"XAU {direction} @ {sig['entry']}  [{style_name}]\n"
         f"SL {sig['stop_loss']} | TP {sig['tp2']}\n"
         f"RR {sig['rr_to_tp2']}R | {sig['lots']} lots | risk ${sig.get('risk_usd','?')}{cap_str}\n"
-        f"Strategy: {sig['strategy']} ({session})\n"
+        f"Strategy: {sig['strategy']} ({session}){warning_line}\n"
         f"\n"
         f"WHY THIS TRADE:\n"
         f"• HTF bias confirmed: {bias_tf} {bias_pos} AND {primary} {primary_pos} — both {side_word} their 50 EMA "

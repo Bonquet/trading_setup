@@ -204,15 +204,18 @@ def main() -> None:
             f"minimum 0.01 lot would risk ${actual_min_risk:.2f} on {risk:.1f}-pt stop. "
             f"Skip this setup — wait for a tighter structure.", data,
         )
-    # Floor to 0.01; check final overshoot vs the dollar cap
+    # Floor to 0.01; flag (don't refuse) if 0.01 lot exceeds the prop cap.
+    # User sees the signal + warning and decides whether to take.
     if lots < 0.01:
         lots = 0.01
     risk_usd = lots * risk * dollars_per_price_per_lot
-    # Hard prop cap: refuse if even minimum lot risks > 1.25× the dollar cap
-    if max_risk_usd > 0 and risk_usd > max_risk_usd * 1.25:
+    cap_exceeded = max_risk_usd > 0 and risk_usd > max_risk_usd
+    cap_exceeded_pct = round((risk_usd / max_risk_usd * 100), 0) if max_risk_usd > 0 else 0
+    # Only hard-refuse if WILDLY beyond cap (3×) — that level of overshoot is structurally unsafe.
+    if max_risk_usd > 0 and risk_usd > max_risk_usd * 3:
         no_trade(
-            f"min lot risks ${risk_usd:.2f} > 1.25× cap ${max_risk_usd:.2f} "
-            f"on {risk:.1f}-pt stop ({style}). Stop too wide for prop limits — wait.", data,
+            f"min lot risks ${risk_usd:.2f} > 3× cap ${max_risk_usd:.2f} "
+            f"on {risk:.1f}-pt stop ({style}). Truly unsafe — wait for tighter structure.", data,
         )
 
     sig = {
@@ -235,6 +238,8 @@ def main() -> None:
         "risk_usd": round(risk_usd, 2),
         "max_risk_cap_usd": max_risk_usd,
         "cap_source": cap_source,
+        "cap_exceeded": cap_exceeded,
+        "cap_exceeded_pct": cap_exceeded_pct,
         "lots": lots,
         "stop_distance": round(risk, 2),
         "confluence": {
