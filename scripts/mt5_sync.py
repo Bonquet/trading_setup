@@ -393,8 +393,9 @@ def main() -> None:
     ap.add_argument("--commit", action="store_true", help="git commit + push after each sync")
     ap.add_argument("--discover", nargs=4, metavar=("LOGIN", "PASSWORD", "SERVER", "BOT_NAME"),
                     help="register a new MT5 account in accounts.json")
-    ap.add_argument("--probe", type=str, metavar="BOT_NAME",
-                    help="sync the currently logged-in MT5 account into accounts.json[BOT_NAME] (no password needed)")
+    ap.add_argument("--probe", type=str, nargs="?", const="__ACTIVE__", metavar="BOT_NAME",
+                    help="sync the currently logged-in MT5 account into accounts.json[BOT_NAME] (no password needed). "
+                         "If BOT_NAME omitted, uses the active account from accounts.json.")
     args = ap.parse_args()
 
     if args.discover:
@@ -402,7 +403,12 @@ def main() -> None:
         discover(int(login_num), password, server, bot_name)
         return
     if args.probe:
-        probe_current(args.probe)
+        bot_name = args.probe
+        if bot_name == "__ACTIVE__":
+            data = load_accounts()
+            bot_name = data.get("active") or "main"
+            print(f"(no name given; using active account '{bot_name}')")
+        probe_current(bot_name)
         return
 
     env = load_env(ENV_PATH)

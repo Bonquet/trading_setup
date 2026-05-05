@@ -38,9 +38,16 @@ DEFAULT_RISK_PCT = 0.01  # 1% (overridable via CLI arg)
 # - intraday: H1 setup, H4 bias, M15 stop      (15-30pt stops, 1-6h holds; prop-firm friendly)
 # - scalp: M15 setup, H1 bias, M15 ATR stop    (5-15pt stops, <1h holds; very twitchy)
 STYLES = {
-    "swing":    {"primary": "H4",  "htf": "D1", "stop_tf": "H1",  "atr_buf": 0.5,  "wr_long": -20,  "wr_short": -80, "stoch_long": 60,  "stoch_short": 40},
-    "intraday": {"primary": "H1",  "htf": "H4", "stop_tf": "M15", "atr_buf": 0.75, "wr_long": -25,  "wr_short": -75, "stoch_long": 55,  "stoch_short": 45},
-    "scalp":    {"primary": "M15", "htf": "H1", "stop_tf": "M15", "atr_buf": 1.5,  "wr_long": -30,  "wr_short": -70, "stoch_long": 50,  "stoch_short": 50},
+    "swing":    {"primary": "H4",  "htf": "D1", "stop_tf": "H1",  "atr_buf": 0.5,  "wr_long": -20,  "wr_short": -80, "stoch_long": 60,  "stoch_short": 40, "stop_method": "swing", "target_method": "pivot_or_25r"},
+    "intraday": {"primary": "H1",  "htf": "H4", "stop_tf": "M15", "atr_buf": 0.75, "wr_long": -25,  "wr_short": -75, "stoch_long": 55,  "stoch_short": 45, "stop_method": "swing", "target_method": "pivot_or_25r"},
+    # Strict scalp — momentum continuation on M15. Designed for very short trades:
+    #   - Stop: 1.0× M15 ATR (typically 6-12 pts)
+    #   - Target: fixed 1.5R (no pivot extension; quick exit)
+    #   - Momentum filter: Williams %R must be EXTREME (> -10 buy / < -90 sell)
+    #   - Stoch in extreme zones (> 80 buy / < 20 sell)
+    #   - No-chop filter: M15 ATR must be >= 5 pts
+    #   - HTF bias on H1 (above/below 50 EMA channel) must align with primary direction
+    "scalp":    {"primary": "M15", "htf": "H1", "stop_tf": "M15", "atr_buf": 0.0,  "wr_long": -10,  "wr_short": -90, "stoch_long": 80,  "stoch_short": 20, "stop_method": "atr",   "target_method": "fixed_15r", "stop_atr_mult": 1.0, "min_primary_atr": 5.0},
 }
 DEFAULT_STYLE = "swing"
 
@@ -115,6 +122,15 @@ def main() -> None:
             f"or wr_short<{cfg['wr_short']} k<{cfg['stoch_short']})", data,
         )
 
+    # Style-specific filters (e.g., scalp's no-chop ATR floor)
+    primary_atr_for_filter = tf.get("atr14") or 0
+    min_atr = cfg.get("min_primary_atr", 0)
+    if min_atr and primary_atr_for_filter < min_atr:
+        no_trade(
+            f"{PRIMARY_TF} ATR {primary_atr_for_filter:.1f} < min {min_atr} for {style} — "
+            f"market too quiet, no scalp.", data,
+        )
+
     # Entry = current spot bid/ask where possible, else H4 close
     entry = float(spot) if spot else close
 
@@ -130,93 +146,88 @@ def main() -> None:
     atr_stop_dist = 1.5 * primary_atr
     atr_floor = 1.0 * primary_atr
 
+    stop_method = cfg.get("stop_method", "swing")
+    target_method = cfg.get("target_method", "pivot_or_25r")
+    stop_atr_mult = cfg.get("stop_atr_mult", 1.0)
+
     if direction == "BUY":
-        if not swing_l:
-            no_trade("no swing low available for SL", data)
-        struct_dist = entry - (swing_l - stop_atr * SL_ATR_BUFFER)
-        # Pick the tighter, but not below ATR floor
-        risk = max(min(struct_dist, atr_stop_dist), atr_floor)
+        if stop_method == "atr":
+            # Pure ATR stop — used for scalps. Uses primary TF ATR for tightness.
+            risk = primary_atr * stop_atr_mult
+        else:
+            # Hybrid: take min(structure, 1.5×primary ATR), floor at 1×primary ATR
+            if not swing_l:
+                no_trade("no swing low available for SL", data)
+            struct_dist = entry - (swing_l - stop_atr * SL_ATR_BUFFER)
+            risk = max(min(struct_dist, atr_stop_dist), atr_floor)
         sl = entry - risk
         if risk <= 0:
             no_trade("invalid SL distance", data)
-        # TP search: take the FURTHEST pivot still inside reason (≤ 4R), giving 2.5–4R targets
-        tp_2r = entry + 2 * risk
-        tp_25r = entry + 2.5 * risk
-        tp_max = entry + 4 * risk
-        pivot_target = None
-        for lvl in ("R2", "R1"):  # try R2 first (further target)
-            v = pivots.get(lvl)
-            if v and tp_25r <= v <= tp_max:
-                pivot_target = v
-                break
-        tp_final = pivot_target if pivot_target else tp_25r
-        tp1 = tp_2r
+
+        if target_method == "fixed_15r":
+            tp_final = entry + 1.5 * risk
+            tp1 = entry + 1.0 * risk
+            pivot_target = None
+        else:
+            tp_2r = entry + 2 * risk
+            tp_25r = entry + 2.5 * risk
+            tp_max = entry + 4 * risk
+            pivot_target = None
+            for lvl in ("R2", "R1"):
+                v = pivots.get(lvl)
+                if v and tp_25r <= v <= tp_max:
+                    pivot_target = v
+                    break
+            tp_final = pivot_target if pivot_target else tp_25r
+            tp1 = tp_2r
     else:  # SELL
-        if not swing_h:
-            no_trade("no swing high available for SL", data)
-        struct_dist = (swing_h + stop_atr * SL_ATR_BUFFER) - entry
-        risk = max(min(struct_dist, atr_stop_dist), atr_floor)
+        if stop_method == "atr":
+            risk = primary_atr * stop_atr_mult
+        else:
+            if not swing_h:
+                no_trade("no swing high available for SL", data)
+            struct_dist = (swing_h + stop_atr * SL_ATR_BUFFER) - entry
+            risk = max(min(struct_dist, atr_stop_dist), atr_floor)
         sl = entry + risk
         if risk <= 0:
             no_trade("invalid SL distance", data)
-        tp_2r = entry - 2 * risk
-        tp_25r = entry - 2.5 * risk
-        tp_max = entry - 4 * risk
-        pivot_target = None
-        for lvl in ("S2", "S1"):
-            v = pivots.get(lvl)
-            if v and tp_max <= v <= tp_25r:
-                pivot_target = v
-                break
-        tp_final = pivot_target if pivot_target else tp_25r
-        tp1 = tp_2r
+
+        if target_method == "fixed_15r":
+            tp_final = entry - 1.5 * risk
+            tp1 = entry - 1.0 * risk
+            pivot_target = None
+        else:
+            tp_2r = entry - 2 * risk
+            tp_25r = entry - 2.5 * risk
+            tp_max = entry - 4 * risk
+            pivot_target = None
+            for lvl in ("S2", "S1"):
+                v = pivots.get(lvl)
+                if v and tp_max <= v <= tp_25r:
+                    pivot_target = v
+                    break
+            tp_final = pivot_target if pivot_target else tp_25r
+            tp1 = tp_2r
 
     rr = abs(tp_final - entry) / risk
-    if rr < 2.0:
-        no_trade(f"RR {rr:.2f} < 2.0 — no room to target", data)
+    min_rr = 1.5 if target_method == "fixed_15r" else 2.0
+    if rr < min_rr:
+        no_trade(f"RR {rr:.2f} < {min_rr} — no room to target", data)
 
-    # Position sizing — caller passes account size, risk pct, and (optional) dollar cap
+    # Position sizing — INFORMATIONAL ONLY. User sets actual lot on the broker.
+    # Engine suggests a lot at risk_pct (default 1%); no prop-firm cap dodging.
     account = float(sys.argv[1]) if len(sys.argv) > 1 else 10000.0
     risk_pct = float(sys.argv[2]) if len(sys.argv) > 2 else DEFAULT_RISK_PCT
-    # max_risk_usd is a hard $-cap (prop firm DD-buffer aware). 0 means "no cap, use risk_pct only".
-    max_risk_usd = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
+    _ = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0  # legacy cap arg (ignored)
 
-    risk_pct_usd = account * risk_pct
-    if max_risk_usd > 0:
-        budget_usd = min(risk_pct_usd, max_risk_usd)
-        cap_source = "prop $-cap" if max_risk_usd <= risk_pct_usd else f"{risk_pct*100:.1f}% of balance"
-    else:
-        budget_usd = risk_pct_usd
-        cap_source = f"{risk_pct*100:.1f}% of balance"
-
-    # XAUUSD: 1 lot = 100 oz, $100 per $1 price move per standard lot.
     dollars_per_price_per_lot = 100.0
-    lots_raw = budget_usd / (risk * dollars_per_price_per_lot)
-    # Floor to 0.01 lots so we NEVER overshoot the budget (round-up would risk more)
+    risk_usd_at_pct = account * risk_pct
     import math
-    lots = math.floor(lots_raw * 100) / 100.0
-    # Broker minimum is 0.01 lot. If even minimum exceeds the budget, refuse the trade
-    # (this is the prop-firm safety net — wide stop = no trade).
-    if lots < 0.01:
-        actual_min_risk = 0.01 * risk * dollars_per_price_per_lot
-        no_trade(
-            f"stop too wide for risk budget ({cap_source} = ${budget_usd:.2f}); "
-            f"minimum 0.01 lot would risk ${actual_min_risk:.2f} on {risk:.1f}-pt stop. "
-            f"Skip this setup — wait for a tighter structure.", data,
-        )
-    # Floor to 0.01; flag (don't refuse) if 0.01 lot exceeds the prop cap.
-    # User sees the signal + warning and decides whether to take.
-    if lots < 0.01:
-        lots = 0.01
-    risk_usd = lots * risk * dollars_per_price_per_lot
-    cap_exceeded = max_risk_usd > 0 and risk_usd > max_risk_usd
-    cap_exceeded_pct = round((risk_usd / max_risk_usd * 100), 0) if max_risk_usd > 0 else 0
-    # Only hard-refuse if WILDLY beyond cap (3×) — that level of overshoot is structurally unsafe.
-    if max_risk_usd > 0 and risk_usd > max_risk_usd * 3:
-        no_trade(
-            f"min lot risks ${risk_usd:.2f} > 3× cap ${max_risk_usd:.2f} "
-            f"on {risk:.1f}-pt stop ({style}). Truly unsafe — wait for tighter structure.", data,
-        )
+    lots = max(0.01, math.floor((risk_usd_at_pct / (risk * dollars_per_price_per_lot)) * 100) / 100.0)
+    risk_usd = round(lots * risk * dollars_per_price_per_lot, 2)
+    cap_source = f"suggested at {risk_pct*100:.1f}% of balance"
+    cap_exceeded = False
+    cap_exceeded_pct = 0
 
     sig = {
         "decision": "Valid Trade",
@@ -236,7 +247,7 @@ def main() -> None:
         "account": account,
         "risk_pct": risk_pct,
         "risk_usd": round(risk_usd, 2),
-        "max_risk_cap_usd": max_risk_usd,
+        "max_risk_cap_usd": 0,
         "cap_source": cap_source,
         "cap_exceeded": cap_exceeded,
         "cap_exceeded_pct": cap_exceeded_pct,
