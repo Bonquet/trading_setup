@@ -2,14 +2,23 @@
   "active": "main",
   "accounts": {
     "main": {
-      "balance": 4897.15,
+      "balance": 4820.49,
       "initial_balance": 5000.0,
       "currency": "USD",
       "prop_firm": true,
       "max_loss_usd": 200.0,
       "max_risk_per_trade_usd": 50.0,
       "style": "swing",
-      "risk_pct": 1.0
+      "risk_pct": 1.0,
+      "mt5": {
+        "login": 414352990,
+        "server": "GoatFunded-Server2",
+        "password_env": "MT5_MAIN_INVESTOR_PWD"
+      },
+      "equity": 4820.49,
+      "margin": 0.0,
+      "margin_free": 4820.49,
+      "last_synced_at": "2026-05-05T08:58Z"
     },
     "savings": {
       "balance": 9957.85,
@@ -23,22 +32,7 @@
       "risk_pct": 1.0
     }
   },
-  "open": [
-    {
-      "id": "20260429T1508Z",
-      "account": "main",
-      "direction": "SELL",
-      "entry": 4542.69,
-      "sl": 4585.8,
-      "tp1": 4456.46,
-      "tp2": 4434.9,
-      "lots": 0.01,
-      "risk_usd": 43.11,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (swing)",
-      "opened_at": "2026-04-29T15:08Z"
-    }
-  ],
+  "open": [],
   "closed": [
     {
       "id": "20260428T1232Z",
@@ -161,6 +155,114 @@
       "status": "win",
       "closed_at": "2026-04-29T13:52Z",
       "reason": ""
+    },
+    {
+      "id": "mt5_9378309",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 0,
+      "sl": 0,
+      "tp1": 0,
+      "tp2": 0,
+      "lots": 0.05,
+      "exit": 4560.34,
+      "pnl_usd": -0.25,
+      "r": 0,
+      "status": "breakeven",
+      "strategy": "mt5-imported",
+      "closed_at": "2026-05-01T12:57Z",
+      "reason": "",
+      "mt5_ticket": 9378309
+    },
+    {
+      "id": "mt5_9461865",
+      "account": "main",
+      "direction": "BUY",
+      "entry": 0,
+      "sl": 0,
+      "tp1": 0,
+      "tp2": 0,
+      "lots": 0.05,
+      "exit": 4580.86,
+      "pnl_usd": -102.6,
+      "r": 0,
+      "status": "loss",
+      "strategy": "mt5-imported",
+      "closed_at": "2026-05-01T15:13Z",
+      "reason": "[sl 4580.26]",
+      "mt5_ticket": 9461865
+    },
+    {
+      "id": "mt5_9556489",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 0,
+      "sl": 0,
+      "tp1": 0,
+      "tp2": 0,
+      "lots": 0.05,
+      "exit": 4601.46,
+      "pnl_usd": -0.25,
+      "r": 0,
+      "status": "breakeven",
+      "strategy": "mt5-imported",
+      "closed_at": "2026-05-01T16:39Z",
+      "reason": "",
+      "mt5_ticket": 9556489
+    },
+    {
+      "id": "mt5_9576547",
+      "account": "main",
+      "direction": "BUY",
+      "entry": 0,
+      "sl": 0,
+      "tp1": 0,
+      "tp2": 0,
+      "lots": 0.05,
+      "exit": 4612.24,
+      "pnl_usd": -53.9,
+      "r": 0,
+      "status": "loss",
+      "strategy": "mt5-imported",
+      "closed_at": "2026-05-01T16:53Z",
+      "reason": "[sl 4612.18]",
+      "mt5_ticket": 9576547
+    },
+    {
+      "id": "mt5_10677635",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 0,
+      "sl": 0,
+      "tp1": 0,
+      "tp2": 0,
+      "lots": 0.05,
+      "exit": 4527.91,
+      "pnl_usd": -0.25,
+      "r": 0,
+      "status": "breakeven",
+      "strategy": "mt5-imported",
+      "closed_at": "2026-05-04T18:48Z",
+      "reason": "",
+      "mt5_ticket": 10677635
+    },
+    {
+      "id": "mt5_10834513",
+      "account": "main",
+      "direction": "BUY",
+      "entry": 0,
+      "sl": 0,
+      "tp1": 0,
+      "tp2": 0,
+      "lots": 0.05,
+      "exit": 4532.49,
+      "pnl_usd": -22.26,
+      "r": 0,
+      "status": "loss",
+      "strategy": "mt5-imported",
+      "closed_at": "2026-05-05T04:02Z",
+      "reason": "[sl 4532.47]",
+      "mt5_ticket": 10834513
     }
   ]
 }

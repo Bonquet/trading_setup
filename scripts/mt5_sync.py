@@ -267,6 +267,67 @@ def sync_account(mt5, env: dict, data: dict, name: str) -> bool:
         mt5.shutdown()
 
 
+def probe_current(bot_name: str, register: bool = True) -> None:
+    """Sync the CURRENTLY logged-in MT5 account into accounts.json[bot_name].
+
+    No investor password needed — uses the running MT5 terminal session.
+    Useful for one-shot syncs without storing credentials. For scheduled
+    auto-sync of multiple accounts, use --discover with investor passwords.
+    """
+    mt5 = import_mt5()
+    if not mt5.initialize():
+        sys.exit(f"mt5.initialize() failed: {mt5.last_error()}. Is MT5 desktop running?")
+    info = mt5.account_info()
+    if info is None:
+        mt5.shutdown()
+        sys.exit(f"No account currently logged in: {mt5.last_error()}")
+
+    print(f"Currently logged in: {info.name} (login {info.login}@{info.server})")
+    print(f"  Balance ${info.balance:.2f} | Equity ${info.equity:.2f}")
+
+    data = load_accounts()
+    if bot_name not in data["accounts"]:
+        if not register:
+            mt5.shutdown()
+            sys.exit(f"Account '{bot_name}' not in accounts.json. Re-run with --probe to register.")
+        # Register a new bot account from this MT5 state
+        data["accounts"][bot_name] = {
+            "balance": float(info.balance),
+            "initial_balance": float(info.balance),
+            "currency": info.currency,
+            "prop_firm": True,
+            "max_loss_usd": round(float(info.balance) * 0.04, 2),
+            "max_risk_per_trade_usd": round(float(info.balance) * 0.01, 2),
+            "high_conviction_risk_usd": round(float(info.balance) * 0.02, 2),
+            "style": "swing",
+            "risk_pct": 1.0,
+        }
+        if not data.get("active"):
+            data["active"] = bot_name
+
+    # Set / update the mt5 block (without password — probe mode just records identity)
+    pwd_env = f"MT5_{bot_name.upper()}_INVESTOR_PWD"
+    data["accounts"][bot_name]["mt5"] = {
+        "login": int(info.login),
+        "server": info.server,
+        "password_env": pwd_env,
+    }
+
+    # Pull live state
+    state = fetch_account_state(mt5)
+    merge_into_accounts(data, bot_name, state)
+    save_accounts(data)
+    mt5.shutdown()
+
+    print(f"\nSynced '{bot_name}' from live MT5 session:")
+    print(f"  balance ${state['balance']:.2f} | equity ${state['equity']:.2f}")
+    xau_open = [p for p in state['positions'] if p['symbol'].upper().startswith('XAU')]
+    print(f"  open XAU positions: {len(xau_open)}")
+    print(f"\nFor auto-sync going forward, add this line to {ENV_PATH}:")
+    print(f"  {pwd_env}=<your investor password>")
+    print("then run: python scripts/mt5_sync.py")
+
+
 def discover(login_num: int, password: str, server: str, bot_name: str) -> None:
     """Add a new MT5 account to accounts.json and config/.env (if writable)."""
     data = load_accounts()
@@ -332,11 +393,16 @@ def main() -> None:
     ap.add_argument("--commit", action="store_true", help="git commit + push after each sync")
     ap.add_argument("--discover", nargs=4, metavar=("LOGIN", "PASSWORD", "SERVER", "BOT_NAME"),
                     help="register a new MT5 account in accounts.json")
+    ap.add_argument("--probe", type=str, metavar="BOT_NAME",
+                    help="sync the currently logged-in MT5 account into accounts.json[BOT_NAME] (no password needed)")
     args = ap.parse_args()
 
     if args.discover:
         login_num, password, server, bot_name = args.discover
         discover(int(login_num), password, server, bot_name)
+        return
+    if args.probe:
+        probe_current(args.probe)
         return
 
     env = load_env(ENV_PATH)

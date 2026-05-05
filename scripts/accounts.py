@@ -107,7 +107,7 @@ def _dd_status(acc: dict) -> str:
     used = max(0.0, initial - acc.get("balance", initial))
     remaining = max_loss - used
     pct_used = (used / max_loss * 100) if max_loss else 0
-    warn = " ⚠️" if pct_used > 70 else ""
+    warn = " [WARN]" if pct_used > 70 else ""
     return f" | DD ${remaining:,.0f}/${max_loss:,.0f} left ({pct_used:.0f}% used){warn}"
 
 
@@ -121,7 +121,7 @@ def cmd_list() -> str:
         style = acc.get("style", "intraday")
         cap = acc.get("max_risk_per_trade_usd", 0)
         cap_str = f" | cap ${cap:,.0f}/tr" if cap else ""
-        frozen_str = " ❄️ FROZEN" if acc.get("frozen") else ""
+        frozen_str = " [FROZEN]" if acc.get("frozen") else ""
         lines.append(f"• {name}: ${acc['balance']:,.2f} [{style}]{cap_str}{_dd_status(acc)}{frozen_str}{marker}")
     # per-account P&L rollup
     pnl_by: dict[str, float] = {k: 0.0 for k in data["accounts"]}
