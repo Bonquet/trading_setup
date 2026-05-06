@@ -145,6 +145,16 @@ def cmd_list() -> str:
 def cmd_set(name: str, balance: float, currency: str = "USD") -> str:
     data = load()
     existing = data["accounts"].get(name) or {}
+    # Guard: don't let manual /balance clobber an MT5-synced account.
+    # The next auto-probe (every 5 min) would overwrite the manual value anyway.
+    if existing.get("mt5"):
+        last_sync = existing.get("last_synced_at", "never")
+        return (
+            f"REFUSED: '{name}' is auto-synced from MT5 (last sync {last_sync}, "
+            f"balance ${existing.get('balance', 0):,.2f}). Manual balance changes are overwritten "
+            f"every 5 min. Use the broker terminal to change balance, or /resetphase {name} <new_balance> "
+            f"if you started a new prop phase."
+        )
     new = {
         "balance": float(balance),
         "initial_balance": existing.get("initial_balance", float(balance)),
@@ -162,6 +172,23 @@ def cmd_set(name: str, balance: float, currency: str = "USD") -> str:
     verb = "updated" if existing else "created"
     active = " (now active)" if data["active"] == name and not existing else ""
     return f"Account {verb}: {name} = ${balance:,.2f} {currency} (risk {new['risk_pct']}%, style {new['style']}){active}"
+
+
+def cmd_resetphase(name: str, new_balance: float) -> str:
+    """Reset an account for a new prop firm phase: sets BOTH balance and initial_balance,
+    and clears closed[] history for this account so DD tracking starts fresh.
+    Works on synced accounts too (sets new initial_balance baseline)."""
+    data = load()
+    require_account(data, name)
+    acc = data["accounts"][name]
+    acc["balance"] = float(new_balance)
+    acc["initial_balance"] = float(new_balance)
+    # Clear this account's closed history (keeps other accounts intact)
+    before = len(data.get("closed", []))
+    data["closed"] = [t for t in data.get("closed", []) if t.get("account") != name]
+    cleared = before - len(data["closed"])
+    save(data)
+    return f"Phase reset: {name} new initial balance = ${new_balance:,.2f}, cleared {cleared} closed trades."
 
 
 def cmd_buffer(name: str, max_loss: float) -> str:
@@ -517,6 +544,14 @@ def handle_whatsapp(command: str, raw_args: str, with_notify: bool = True) -> No
                 out = "Usage: /style <account> <swing|intraday|scalp>\nExample: /style main intraday"
             else:
                 out = cmd_style(toks[0], toks[1])
+        elif cmd == "resetphase":
+            if len(toks) < 2:
+                out = "Usage: /resetphase <account> <new_balance>\nResets initial_balance + clears closed history for new prop phase."
+            else:
+                try:
+                    out = cmd_resetphase(toks[0], float(toks[1]))
+                except ValueError:
+                    out = f"Bad balance: {toks[1]}"
         elif cmd == "freeze":
             if not toks:
                 out = "Usage: /freeze <account>\nBlocks new trades, mirrors, and signals on this account until /unfreeze."
@@ -589,6 +624,8 @@ def main() -> None:
         out = cmd_current()
     elif sub == "risk":
         out = cmd_risk(rest[0], float(rest[1]))
+    elif sub == "resetphase":
+        out = cmd_resetphase(rest[0], float(rest[1]))
     elif sub == "freeze":
         out = cmd_freeze(rest[0], frozen=True)
     elif sub == "unfreeze":

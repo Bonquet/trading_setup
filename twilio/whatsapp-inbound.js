@@ -28,7 +28,7 @@ exports.handler = async function (context, event, callback) {
   const ALLOWED = new Set([
     "health", "london", "ny", "best", "scalp", "quick", "summary",
     "accounts", "balance", "active", "risk", "took", "close", "current", "pnl",
-    "buffer", "maxrisk", "style", "freeze", "unfreeze",
+    "buffer", "maxrisk", "style", "freeze", "unfreeze", "resetphase",
   ]);
   const HELP_TEXT =
     "XAU bot commands:\n" +
