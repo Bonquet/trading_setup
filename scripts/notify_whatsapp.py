@@ -28,7 +28,7 @@ def load_env(path: Path) -> dict[str, str]:
     import os
     env: dict[str, str] = {}
     if path.exists():
-        for line in path.read_text().splitlines():
+        for line in path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
@@ -39,7 +39,7 @@ def load_env(path: Path) -> dict[str, str]:
                 v = v.split(" #", 1)[0].strip()
             env[k.strip()] = v
     for k in (
-        "GOLDAPI_KEY", "TWELVEDATA_KEY", "WHATSAPP_BACKEND",
+        "GOLDAPI_NET_KEY", "QUOTE_SOURCE", "GOLDAPI_KEY", "TWELVEDATA_KEY", "WHATSAPP_BACKEND",
         "CALLMEBOT_PHONE", "CALLMEBOT_APIKEY",
         "GREENAPI_INSTANCE_ID", "GREENAPI_TOKEN", "GREENAPI_GROUP_ID",
         "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN",

@@ -3,7 +3,7 @@
 Verifies:
   1. Python + required files/folders
   2. config/.env has required keys
-  3. GoldAPI key works (live spot fetch)
+  3. Selected gold spot API key works (goldapi.net preferred, GoldAPI.io fallback)
   4. TwelveData key works (1 candle fetch)
   5. Twilio creds authenticate (account GET — does NOT send a message)
   6. Optional: --send flag fires a real WhatsApp test message
@@ -66,7 +66,7 @@ def load_env(path: Path) -> dict[str, str]:
     import os
     env: dict[str, str] = {}
     if path.exists():
-        for line in path.read_text().splitlines():
+        for line in path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
@@ -76,7 +76,7 @@ def load_env(path: Path) -> dict[str, str]:
                 v = v.split(" #", 1)[0].strip()
             env[k.strip()] = v
     for k in (
-        "GOLDAPI_KEY", "TWELVEDATA_KEY", "WHATSAPP_BACKEND",
+        "GOLDAPI_NET_KEY", "GOLDAPI_KEY", "QUOTE_SOURCE", "TWELVEDATA_KEY", "WHATSAPP_BACKEND",
         "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN",
         "TWILIO_API_KEY_SID", "TWILIO_API_KEY_SECRET",
         "TWILIO_FROM", "TWILIO_TO",
@@ -116,9 +116,22 @@ def check_files() -> list[str]:
 
 def check_env(env: dict) -> list[str]:
     errs = []
-    for k in ("GOLDAPI_KEY", "TWELVEDATA_KEY"):
+    for k in ("TWELVEDATA_KEY",):
         if not env.get(k):
             errs.append(f"{k} missing in config/.env")
+    source = env.get("QUOTE_SOURCE", "auto").strip().lower()
+    if source in {"goldapi-net", "goldapinet"}:
+        if not env.get("GOLDAPI_NET_KEY"):
+            errs.append("GOLDAPI_NET_KEY missing in config/.env")
+    elif source in {"goldapi", "goldapi-io", "goldapiio"}:
+        if not env.get("GOLDAPI_KEY"):
+            errs.append("GOLDAPI_KEY missing in config/.env")
+    elif source in {"twelvedata", "twelve-data"}:
+        pass
+    elif source == "auto":
+        pass
+    else:
+        errs.append("QUOTE_SOURCE must be auto, goldapi-net, goldapi-io, or twelvedata")
     backend = env.get("WHATSAPP_BACKEND", "disabled").lower()
     if backend == "twilio":
         for k in ("TWILIO_ACCOUNT_SID", "TWILIO_FROM", "TWILIO_TO"):
@@ -130,18 +143,66 @@ def check_env(env: dict) -> list[str]:
     return errs
 
 
-def check_goldapi(key: str) -> tuple[bool, str]:
-    code, body = http_get(
-        "https://www.goldapi.io/api/XAU/USD",
-        headers={"x-access-token": key, "Content-Type": "application/json"},
-    )
+def _check_price_json(code: int, body: str, label: str) -> tuple[bool, str]:
     if code != 200:
         return False, f"HTTP {code}: {body[:200]}"
     try:
         j = json.loads(body)
-        return True, f"spot=${j.get('price')}"
+        price = j.get("price") if isinstance(j, dict) else None
+        if price is None:
+            return False, f"{label} JSON missing price: {body[:200]}"
+        return True, f"spot=${price}"
     except Exception:  # noqa: BLE001
         return False, f"bad JSON: {body[:200]}"
+
+
+def check_goldapi_net(key: str) -> tuple[bool, str]:
+    attempts = []
+    code, body = http_get(
+        "https://app.goldapi.net/api/price/XAU/USD",
+        headers={"x-api-key": key},
+    )
+    ok, msg = _check_price_json(code, body, "GoldAPI.net header route")
+    if ok:
+        return ok, msg
+    attempts.append(f"header route {msg}")
+
+    q = urllib.parse.urlencode({"x-api-key": key})
+    code, body = http_get(f"https://app.goldapi.net/price/XAU/USD?{q}")
+    ok, msg = _check_price_json(code, body, "GoldAPI.net query route")
+    if ok:
+        return ok, msg
+    attempts.append(f"query route {msg}")
+    return False, "; ".join(attempts)
+
+
+def check_goldapi_io(key: str) -> tuple[bool, str]:
+    code, body = http_get(
+        "https://www.goldapi.io/api/XAU/USD",
+        headers={"x-access-token": key, "Content-Type": "application/json"},
+    )
+    return _check_price_json(code, body, "GoldAPI.io")
+
+
+def check_twelvedata_spot(key: str) -> tuple[bool, str]:
+    q = urllib.parse.urlencode({"symbol": "XAU/USD", "apikey": key})
+    code, body = http_get(f"https://api.twelvedata.com/price?{q}")
+    return _check_price_json(code, body, "TwelveData spot")
+
+
+def spot_check_plan(env: dict) -> list[tuple[str, str, object]]:
+    source = env.get("QUOTE_SOURCE", "auto").strip().lower()
+    if source in {"goldapi-net", "goldapinet"}:
+        return [("GoldAPI.net", "GOLDAPI_NET_KEY", check_goldapi_net)]
+    if source in {"goldapi", "goldapi-io", "goldapiio"}:
+        return [("GoldAPI.io", "GOLDAPI_KEY", check_goldapi_io)]
+    if source in {"twelvedata", "twelve-data"}:
+        return [("TwelveData spot", "TWELVEDATA_KEY", check_twelvedata_spot)]
+    return [
+        ("GoldAPI.net", "GOLDAPI_NET_KEY", check_goldapi_net),
+        ("GoldAPI.io", "GOLDAPI_KEY", check_goldapi_io),
+        ("TwelveData spot", "TWELVEDATA_KEY", check_twelvedata_spot),
+    ]
 
 
 def check_twelvedata(key: str) -> tuple[bool, str]:
@@ -224,13 +285,28 @@ def main() -> None:
         print(f"{GREEN} config/.env has required keys (backend={env.get('WHATSAPP_BACKEND')})")
         record(True, "Env", f"backend={env.get('WHATSAPP_BACKEND')}")
 
-    # 3. GoldAPI
-    if env.get("GOLDAPI_KEY"):
-        ok, msg = check_goldapi(env["GOLDAPI_KEY"])
-        print(f"{GREEN if ok else RED} GoldAPI: {msg}")
-        record(ok, "GoldAPI", msg[:120])
-        if not ok:
-            fails += 1
+    # 3. Gold spot source
+    spot_ok = False
+    spot_attempted = False
+    spot_errors: list[str] = []
+    for label, key_name, checker in spot_check_plan(env):
+        key = env.get(key_name)
+        if not key:
+            spot_errors.append(f"{label}: {key_name} missing")
+            continue
+        spot_attempted = True
+        ok, msg = checker(key)  # type: ignore[operator]
+        print(f"{GREEN if ok else RED} {label}: {msg}")
+        record(ok, label, msg[:120])
+        if ok:
+            spot_ok = True
+            break
+        spot_errors.append(f"{label}: {msg[:120]}")
+    if not spot_ok:
+        if not spot_attempted:
+            print(f"{RED} Gold spot: {'; '.join(spot_errors)}")
+            record(False, "Gold spot", "; ".join(spot_errors))
+        fails += 1
 
     # 4. TwelveData
     if env.get("TWELVEDATA_KEY"):
