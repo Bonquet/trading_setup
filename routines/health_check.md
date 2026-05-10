@@ -12,14 +12,14 @@ Triggered by user saying "health check", "test everything", "are you working", o
 
 **Files & folders:** OK / FAIL (list any missing)
 **Config (.env):** OK / FAIL
-**GoldAPI:** OK (spot=$X) / FAIL (reason)
+**GoldAPI.net / spot source:** OK (spot=$X) / FAIL (reason)
 **TwelveData:** OK (last close=X) / FAIL (reason)
 **Twilio auth:** OK (account status=active) / FAIL (reason)
 **WhatsApp send:** (only if --send was used) OK / FAIL
 
 **Overall:** ALL GREEN / {n} FAILURES
 
-4. If anything failed, give the user a one-line fix suggestion per failure (e.g. "GoldAPI key may be expired — rotate at goldapi.io" or "Twilio 401 — the API Key secret in `.env` is wrong").
+4. If anything failed, give the user a one-line fix suggestion per failure (e.g. "goldapi.net may be unavailable — keep `QUOTE_SOURCE=auto` so TwelveData spot can cover it" or "Twilio 401 — the API Key secret in `.env` is wrong").
 
 ## Guardrails
 

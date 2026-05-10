@@ -23,7 +23,7 @@ You are a **disciplined trend-following trading bot** for this user. Primary ass
 - **Account size:** ask at session start if not given ("account $?")
 
 ## Data pipeline
-- Live spot: **GoldAPI** (`GOLDAPI_KEY` in `config/.env`)
+- Live spot: **goldapi.net preferred** (`GOLDAPI_NET_KEY` + `QUOTE_SOURCE=auto` in `config/.env`; legacy `GOLDAPI_KEY` and TwelveData spot fallback)
 - OHLC candles: **TwelveData** (`TWELVEDATA_KEY` in `config/.env`)
 - `python scripts/fetch_gold.py` → `python scripts/compute_levels.py`
 - Cached at `data/cache/latest.json` and `data/cache/levels.json`

@@ -1,4 +1,4 @@
-"""Fetch XAUUSD live spot (GoldAPI) + OHLC candles on D1/H4/H1/M15 (TwelveData).
+"""Fetch XAUUSD live spot + OHLC candles on D1/H4/H1/M15 (TwelveData).
 
 Writes a single JSON blob to data/cache/<UTC timestamp>.json and prints the path.
 Reads keys from config/.env.
@@ -10,6 +10,7 @@ import os
 import sys
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,13 +26,19 @@ TIMEFRAMES = {
 }
 CANDLE_COUNTS = {"D1": 120, "H4": 200, "H1": 200, "M15": 200}
 SYMBOL_TD = "XAU/USD"
+GOLDAPI_NET_ENDPOINTS = (
+    ("https://app.goldapi.net/api/price/XAU/USD", "header"),
+    ("https://app.goldapi.net/price/XAU/USD", "query"),
+)
+GOLDAPI_IO_ENDPOINT = "https://www.goldapi.io/api/XAU/USD"
+PLACEHOLDER_KEYS = {"", "your_goldapi_key_here", "your_goldapi_net_key_here"}
 
 
 def load_env(path: Path) -> dict[str, str]:
     """Read .env (if present) then overlay os.environ so CI secrets win."""
     env: dict[str, str] = {}
     if path.exists():
-        for line in path.read_text().splitlines():
+        for line in path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line or line.startswith("#") or "=" not in line:
                 continue
@@ -40,11 +47,11 @@ def load_env(path: Path) -> dict[str, str]:
             if " #" in v and not (v.startswith('"') or v.startswith("'")):
                 v = v.split(" #", 1)[0].strip()
             env[k.strip()] = v
-    for k in ("GOLDAPI_KEY", "TWELVEDATA_KEY"):
+    for k in ("GOLDAPI_NET_KEY", "GOLDAPI_KEY", "QUOTE_SOURCE", "TWELVEDATA_KEY"):
         if os.environ.get(k):
             env[k] = os.environ[k]
-    if "GOLDAPI_KEY" not in env or "TWELVEDATA_KEY" not in env:
-        sys.exit("GOLDAPI_KEY and TWELVEDATA_KEY required (config/.env or environment)")
+    if "TWELVEDATA_KEY" not in env:
+        sys.exit("TWELVEDATA_KEY required (config/.env or environment)")
     return env
 
 
@@ -57,14 +64,94 @@ def http_get_json(url: str, headers: dict[str, str] | None = None) -> dict:
         h.update(headers)
     req = urllib.request.Request(url, headers=h)
     with urllib.request.urlopen(req, timeout=20) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+        body = resp.read().decode("utf-8", errors="replace")
+    try:
+        data = json.loads(body)
+    except json.JSONDecodeError as exc:
+        preview = body[:160].replace("\n", " ")
+        raise RuntimeError(f"expected JSON from spot API, got {preview!r}") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(f"expected JSON object from spot API, got {type(data).__name__}")
+    return data
 
 
-def fetch_spot(key: str) -> dict:
-    return http_get_json(
-        "https://www.goldapi.io/api/XAU/USD",
+def _require_price(data: dict, source: str) -> dict:
+    if data.get("price") is None:
+        raise RuntimeError(f"{source} response missing price")
+    data.setdefault("source", source)
+    return data
+
+
+def fetch_spot_goldapi_net(key: str) -> dict:
+    """Fetch XAU/USD from goldapi.net.
+
+    The public docs show the query-param route, while another working setup used
+    the /api/price route with an x-api-key header. Try both and require JSON.
+    """
+    errors: list[str] = []
+    for base_url, auth_style in GOLDAPI_NET_ENDPOINTS:
+        if auth_style == "header":
+            url = base_url
+            headers = {"x-api-key": key}
+        else:
+            query = urllib.parse.urlencode({"x-api-key": key})
+            url = f"{base_url}?{query}"
+            headers = None
+        try:
+            return _require_price(http_get_json(url, headers=headers), "goldapi.net")
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{auth_style}: {exc}")
+    raise RuntimeError("; ".join(errors))
+
+
+def fetch_spot_goldapi_io(key: str) -> dict:
+    data = http_get_json(
+        GOLDAPI_IO_ENDPOINT,
         headers={"x-access-token": key, "Content-Type": "application/json"},
     )
+    return _require_price(data, "goldapi.io")
+
+
+def fetch_spot_twelvedata(key: str) -> dict:
+    query = urllib.parse.urlencode({"symbol": SYMBOL_TD, "apikey": key})
+    data = http_get_json(f"https://api.twelvedata.com/price?{query}")
+    return _require_price(data, "twelvedata")
+
+
+def _configured_key(env: dict[str, str], name: str) -> str:
+    value = env.get(name, "").strip()
+    return "" if value in PLACEHOLDER_KEYS else value
+
+
+def fetch_spot(env: dict[str, str]) -> dict:
+    source = env.get("QUOTE_SOURCE", "auto").strip().lower()
+    sources: list[tuple[str, str, Callable[[str], dict]]] = []
+    if source in {"goldapi-net", "goldapinet"}:
+        sources = [("goldapi.net", "GOLDAPI_NET_KEY", fetch_spot_goldapi_net)]
+    elif source in {"goldapi", "goldapi-io", "goldapiio"}:
+        sources = [("goldapi.io", "GOLDAPI_KEY", fetch_spot_goldapi_io)]
+    elif source in {"twelvedata", "twelve-data"}:
+        sources = [("TwelveData spot", "TWELVEDATA_KEY", fetch_spot_twelvedata)]
+    elif source == "auto":
+        sources = [
+            ("goldapi.net", "GOLDAPI_NET_KEY", fetch_spot_goldapi_net),
+            ("goldapi.io", "GOLDAPI_KEY", fetch_spot_goldapi_io),
+            ("TwelveData spot", "TWELVEDATA_KEY", fetch_spot_twelvedata),
+        ]
+    else:
+        sys.exit("QUOTE_SOURCE must be auto, goldapi-net, goldapi-io, or twelvedata")
+
+    errors: list[str] = []
+    for label, key_name, fetcher in sources:
+        key = _configured_key(env, key_name)
+        if not key:
+            errors.append(f"{label}: {key_name} not set")
+            continue
+        try:
+            return fetcher(key)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{label}: {exc}")
+    raise RuntimeError("No spot source succeeded: " + " | ".join(errors))
 
 
 def fetch_candles(tf_label: str, tf_api: str, count: int, key: str) -> dict:
@@ -93,10 +180,7 @@ def fetch_candles(tf_label: str, tf_api: str, count: int, key: str) -> dict:
 
 def main() -> None:
     env = load_env(ENV_PATH)
-    gold_key = env.get("GOLDAPI_KEY", "")
     td_key = env.get("TWELVEDATA_KEY", "")
-    if not gold_key or gold_key == "your_goldapi_key_here":
-        sys.exit("GOLDAPI_KEY not set in config/.env")
     if not td_key or td_key == "your_twelvedata_key_here":
         sys.exit("TWELVEDATA_KEY not set in config/.env")
 
@@ -104,7 +188,7 @@ def main() -> None:
     payload: dict = {
         "fetched_at_utc": now.isoformat(),
         "symbol": "XAUUSD",
-        "spot": fetch_spot(gold_key),
+        "spot": fetch_spot(env),
         "timeframes": {},
     }
     for label, api in TIMEFRAMES.items():

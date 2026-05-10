@@ -29,6 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
+      GOLDAPI_NET_KEY: ${{ secrets.GOLDAPI_NET_KEY }}
+      QUOTE_SOURCE: auto
       GOLDAPI_KEY: ${{ secrets.GOLDAPI_KEY }}
       TWELVEDATA_KEY: ${{ secrets.TWELVEDATA_KEY }}
       WHATSAPP_BACKEND: twilio

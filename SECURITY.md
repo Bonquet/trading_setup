@@ -1,9 +1,10 @@
 # Security Notes
 
 ## Rotate these keys now
-Both of the keys below were pasted into a chat conversation. Treat them as leaked. Rotate them at the first opportunity:
+The keys below were pasted into a chat conversation. Treat them as leaked. Rotate them at the first opportunity:
 
-- **GoldAPI** — log in at https://www.goldapi.io, regenerate key, replace `GOLDAPI_KEY` in `config/.env`.
+- **goldapi.net** — log in at https://goldapi.net/client/dashboard, regenerate key, replace `GOLDAPI_NET_KEY` in `config/.env`.
+- **GoldAPI.io legacy fallback** — log in at https://www.goldapi.io, regenerate key, replace `GOLDAPI_KEY` in `config/.env` if you still use it.
 - **TwelveData** — log in at https://twelvedata.com, regenerate API key, replace `TWELVEDATA_KEY` in `config/.env`.
 
 ## Rules going forward

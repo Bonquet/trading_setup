@@ -8,7 +8,7 @@ This wires the bot to run **fully automatic** on GitHub's schedule and send What
 GitHub Actions cron
   → checkout repo
   → python scripts/run_auto.py <session> <account>
-      → fetch_gold.py       (GoldAPI + TwelveData)
+      → fetch_gold.py       (goldapi.net + TwelveData)
       → compute_levels.py   (50 EMA, W%R, Stoch, pivots)
       → generate_signal.py  (deterministic 50 EMA Williams rules)
       → notify_whatsapp.py  (Twilio) — ONLY if Valid Trade
@@ -46,7 +46,9 @@ git push -u origin main
 
 | Secret | Value |
 |---|---|
-| `GOLDAPI_KEY` | your GoldAPI key |
+| `GOLDAPI_NET_KEY` | your goldapi.net key |
+| `QUOTE_SOURCE` | `auto` |
+| `GOLDAPI_KEY` | optional legacy GoldAPI.io fallback key |
 | `TWELVEDATA_KEY` | your TwelveData key |
 | `TWILIO_ACCOUNT_SID` | `ACa4b729d76faf86df59a69040e2bfc6b6` |
 | `TWILIO_API_KEY_SID` | starts with `SK...` (from Twilio console → API Keys & Tokens) |

@@ -29,6 +29,8 @@ jobs:
     timeout-minutes: 5
     env:
       # Data feeds
+      GOLDAPI_NET_KEY: ${{ secrets.GOLDAPI_NET_KEY }}
+      QUOTE_SOURCE: auto
       GOLDAPI_KEY: ${{ secrets.GOLDAPI_KEY }}
       TWELVEDATA_KEY: ${{ secrets.TWELVEDATA_KEY }}
       # Twilio WhatsApp
