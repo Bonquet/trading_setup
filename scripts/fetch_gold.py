@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
@@ -32,6 +33,7 @@ GOLDAPI_NET_ENDPOINTS = (
 )
 GOLDAPI_IO_ENDPOINT = "https://www.goldapi.io/api/XAU/USD"
 PLACEHOLDER_KEYS = {"", "your_goldapi_key_here", "your_goldapi_net_key_here"}
+DEFAULT_TWELVEDATA_RETRY_SECONDS = 65
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -69,7 +71,7 @@ def http_get_json(url: str, headers: dict[str, str] | None = None) -> dict:
         data = json.loads(body)
     except json.JSONDecodeError as exc:
         preview = body[:160].replace("\n", " ")
-        raise RuntimeError(f"expected JSON from spot API, got {preview!r}") from exc
+        raise RuntimeError(f"expected JSON from {url}, got {preview!r}") from exc
     if not isinstance(data, dict):
         raise RuntimeError(f"expected JSON object from spot API, got {type(data).__name__}")
     return data
@@ -136,7 +138,6 @@ def fetch_spot(env: dict[str, str]) -> dict:
         sources = [
             ("goldapi.net", "GOLDAPI_NET_KEY", fetch_spot_goldapi_net),
             ("goldapi.io", "GOLDAPI_KEY", fetch_spot_goldapi_io),
-            ("TwelveData spot", "TWELVEDATA_KEY", fetch_spot_twelvedata),
         ]
     else:
         sys.exit("QUOTE_SOURCE must be auto, goldapi-net, goldapi-io, or twelvedata")
@@ -154,13 +155,26 @@ def fetch_spot(env: dict[str, str]) -> dict:
     raise RuntimeError("No spot source succeeded: " + " | ".join(errors))
 
 
+def _is_twelvedata_rate_limit(message: str) -> bool:
+    msg = message.lower()
+    return "api credits" in msg or "current minute" in msg or "rate limit" in msg
+
+
 def fetch_candles(tf_label: str, tf_api: str, count: int, key: str) -> dict:
     q = urllib.parse.urlencode(
         {"symbol": SYMBOL_TD, "interval": tf_api, "outputsize": count, "apikey": key}
     )
-    data = http_get_json(f"https://api.twelvedata.com/time_series?{q}")
+    url = f"https://api.twelvedata.com/time_series?{q}"
+    retry_seconds = int(os.environ.get("TWELVEDATA_RETRY_SECONDS", DEFAULT_TWELVEDATA_RETRY_SECONDS))
+    data = http_get_json(url)
     if data.get("status") == "error":
-        raise RuntimeError(f"TwelveData error for {tf_label}: {data.get('message')}")
+        message = data.get("message", "unknown error")
+        if retry_seconds > 0 and _is_twelvedata_rate_limit(message):
+            print(f"TwelveData rate limit for {tf_label}; waiting {retry_seconds}s then retrying...", file=sys.stderr)
+            time.sleep(retry_seconds)
+            data = http_get_json(url)
+        if data.get("status") == "error":
+            raise RuntimeError(f"TwelveData error for {tf_label}: {data.get('message')}")
     # Normalize oldest-first
     values = list(reversed(data.get("values", [])))
     return {
@@ -178,6 +192,24 @@ def fetch_candles(tf_label: str, tf_api: str, count: int, key: str) -> dict:
     }
 
 
+def spot_from_candles(timeframes: dict, *, errors: str | None = None) -> dict:
+    for label in ("M15", "H1", "H4", "D1"):
+        candles = timeframes.get(label, {}).get("candles") or []
+        if candles:
+            last = candles[-1]
+            spot = {
+                "price": last["c"],
+                "bid": None,
+                "ask": None,
+                "source": f"twelvedata_{label}_close",
+                "time": last.get("t"),
+            }
+            if errors:
+                spot["fallback_reason"] = errors[:500]
+            return spot
+    raise RuntimeError("No candle data available for spot fallback")
+
+
 def main() -> None:
     env = load_env(ENV_PATH)
     td_key = env.get("TWELVEDATA_KEY", "")
@@ -185,21 +217,30 @@ def main() -> None:
         sys.exit("TWELVEDATA_KEY not set in config/.env")
 
     now = datetime.now(timezone.utc)
+    spot: dict | None = None
+    spot_error: str | None = None
+    try:
+        spot = fetch_spot(env)
+    except Exception as exc:  # noqa: BLE001
+        spot_error = str(exc)
+        print(f"Spot providers unavailable; will use latest candle close. {spot_error[:220]}", file=sys.stderr)
+
     payload: dict = {
         "fetched_at_utc": now.isoformat(),
         "symbol": "XAUUSD",
-        "spot": fetch_spot(env),
+        "spot": {},
         "timeframes": {},
     }
     for label, api in TIMEFRAMES.items():
         payload["timeframes"][label] = fetch_candles(label, api, CANDLE_COUNTS[label], td_key)
+    payload["spot"] = spot if spot is not None else spot_from_candles(payload["timeframes"], errors=spot_error)
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     stamp = now.strftime("%Y%m%dT%H%M%SZ")
     out = CACHE_DIR / f"{stamp}.json"
-    out.write_text(json.dumps(payload, indent=2))
+    out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     latest = CACHE_DIR / "latest.json"
-    latest.write_text(json.dumps(payload, indent=2))
+    latest.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     print(str(out))
 
 
