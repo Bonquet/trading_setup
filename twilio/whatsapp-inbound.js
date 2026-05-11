@@ -22,8 +22,14 @@ exports.handler = async function (context, event, callback) {
   const raw = (event.Body || "").trim();
   const stripped = raw.replace(/^\//, "");
   const parts = stripped.split(/\s+/);
-  const word = (parts[0] || "").toLowerCase();
-  const args = parts.slice(1).join(" ");
+  let word = (parts[0] || "").toLowerCase();
+  let args = parts.slice(1).join(" ");
+
+  // Voice dictation often turns "/london" into "slash london" (or "flash london").
+  if ((word === "slash" || word === "flash") && parts[1]) {
+    word = parts[1].replace(/^\//, "").toLowerCase();
+    args = parts.slice(2).join(" ");
+  }
 
   const ALLOWED = new Set([
     "health", "london", "ny", "best", "scalp", "quick", "summary",
