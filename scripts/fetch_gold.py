@@ -34,6 +34,7 @@ GOLDAPI_NET_ENDPOINTS = (
 GOLDAPI_IO_ENDPOINT = "https://www.goldapi.io/api/XAU/USD"
 PLACEHOLDER_KEYS = {"", "your_goldapi_key_here", "your_goldapi_net_key_here"}
 DEFAULT_TWELVEDATA_RETRY_SECONDS = 65
+DEFAULT_SPOT_MAX_DEVIATION_POINTS = 25.0
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -210,6 +211,24 @@ def spot_from_candles(timeframes: dict, *, errors: str | None = None) -> dict:
     raise RuntimeError("No candle data available for spot fallback")
 
 
+def spot_is_consistent_with_candles(spot: dict, timeframes: dict) -> tuple[bool, str]:
+    candles = timeframes.get("M15", {}).get("candles") or []
+    if not candles or spot.get("price") is None:
+        return True, ""
+    last = candles[-1]
+    spot_price = float(spot["price"])
+    m15_close = float(last["c"])
+    max_deviation = float(os.environ.get("SPOT_MAX_DEVIATION_POINTS", DEFAULT_SPOT_MAX_DEVIATION_POINTS))
+    diff = abs(spot_price - m15_close)
+    if diff <= max_deviation:
+        return True, ""
+    reason = (
+        f"spot {spot_price} from {spot.get('source', 'provider')} differs from "
+        f"M15 close {m15_close} by {diff:.2f} points (max {max_deviation:.2f})"
+    )
+    return False, reason
+
+
 def main() -> None:
     env = load_env(ENV_PATH)
     td_key = env.get("TWELVEDATA_KEY", "")
@@ -233,7 +252,15 @@ def main() -> None:
     }
     for label, api in TIMEFRAMES.items():
         payload["timeframes"][label] = fetch_candles(label, api, CANDLE_COUNTS[label], td_key)
-    payload["spot"] = spot if spot is not None else spot_from_candles(payload["timeframes"], errors=spot_error)
+    if spot is not None:
+        consistent, reason = spot_is_consistent_with_candles(spot, payload["timeframes"])
+        if consistent:
+            payload["spot"] = spot
+        else:
+            print(f"Spot sanity check failed; using latest candle close. {reason}", file=sys.stderr)
+            payload["spot"] = spot_from_candles(payload["timeframes"], errors=reason)
+    else:
+        payload["spot"] = spot_from_candles(payload["timeframes"], errors=spot_error)
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     stamp = now.strftime("%Y%m%dT%H%M%SZ")

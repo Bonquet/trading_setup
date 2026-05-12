@@ -107,9 +107,16 @@ jobs:
               python scripts/weekly_stats.py --days 7 --notify
               ;;
             current)
-              # /current must run after compute so spot is fresh; kick a quick fetch+compute then show
-              python scripts/fetch_gold.py >/dev/null 2>&1 || true
-              python scripts/compute_levels.py >/dev/null 2>&1 || true
+              # /current must use a fresh cache. If refresh fails, tell the user
+              # instead of silently reusing stale levels.
+              if ! python scripts/fetch_gold.py; then
+                python scripts/notify_whatsapp.py "XAU /current failed: price refresh failed. Data feed unavailable; not using stale cache."
+                exit 0
+              fi
+              if ! python scripts/compute_levels.py; then
+                python scripts/notify_whatsapp.py "XAU /current failed: level computation failed after price refresh."
+                exit 0
+              fi
               python scripts/accounts.py whatsapp "$CMD" "$ARGS"
               ;;
             accounts|balance|active|risk|took|close|pnl|buffer|maxrisk|style|freeze|unfreeze|resetphase)
