@@ -1,17 +1,9 @@
 {
   "decision": "Valid Trade",
   "direction": "BUY",
-  "entry": 4700.00,
-  "stop_loss": 4680.00,
-  "tp1": 4720.00,
-  "tp2": 4740.00,
-  "lots": 0.05,
-  "risk_usd": 100,
-  "risk_pct": 0.01,
-  "style": "swing",
-  "strategy": "TEST - BUY signal for EA validation",
-  "signal_id": "TEST_BUY_001",
-  "published_at_utc": "2099-12-31T23:59:59Z",
-  "session": "test",
-  "account_name": "test"
+  "stop_distance_points": 300,
+  "tp_distance_points": 600,
+  "comment": "Test BUY: 300pt SL, 600pt TP, 2R target. Works at any historical price level.",
+  "signal_id": "TEST_BUY_RELATIVE",
+  "style": "tester"
 }

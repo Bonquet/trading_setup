@@ -20,9 +20,10 @@
 
 //==================== Inputs ====================================//
 input group "Signal Source (file-based — works in Strategy Tester)"
-input string  Signal_File         = "test_signal_buy.json";   // file in MQL5/Files/
-input int     Poll_Seconds        = 30;
-input string  Symbol_Override     = "";                        // empty = chart symbol
+input string  Signal_File              = "test_signal_buy.json";   // file in MQL5/Files/
+input int     Poll_Seconds             = 30;
+input string  Symbol_Override          = "";                        // empty = chart symbol
+input int     Re_Trigger_Hours         = 24;                        // re-take signal every N hours so multiple trades happen in one backtest
 
 input group "Risk"
 input double  Risk_Percent        = 1.0;
@@ -33,7 +34,6 @@ input int     Max_Trades_Per_Day  = 5;
 input int     Max_Open_Positions  = 1;
 
 input group "Signal Filters"
-input int     Max_Signal_Age_Sec  = 0;          // 0 = ignore age check (good for tester)
 input bool    Take_Buy_Signals    = true;
 input bool    Take_Sell_Signals   = true;
 
@@ -56,10 +56,10 @@ CPositionInfo  g_pos;
 CSymbolInfo    g_sym;
 
 string         g_symbol;
-string         g_last_signal_id   = "";
 int            g_today_trades     = 0;
 datetime       g_today_date       = 0;
 datetime       g_last_poll        = 0;
+datetime       g_last_trigger_at  = 0;  // when we last opened a test trade
 
 struct PosState {
    ulong  ticket;
@@ -153,14 +153,17 @@ string JsonStr(string json, string key) {
 double JsonNum(string json, string key) { return StringToDouble(JsonStr(json, key)); }
 
 //==================== Process incoming signal ===================//
+// Uses RELATIVE distances so the test signal works at any price level
+// (current market price + stop/tp distance, not absolute entry/sl/tp values).
 void ProcessSignal(string json) {
    string decision = JsonStr(json, "decision");
    if (decision != "Valid Trade") return;
 
-   string signal_id = JsonStr(json, "signal_id");
-   if (signal_id == "") signal_id = JsonStr(json, "published_at_utc");
-   if (signal_id == "") signal_id = JsonStr(json, "fetched_at_utc");
-   if (signal_id == g_last_signal_id) return;
+   // Re-trigger window: only fire a new trade if enough time has passed
+   if (Re_Trigger_Hours > 0 && g_last_trigger_at > 0) {
+      int hours_since = (int)((TimeCurrent() - g_last_trigger_at) / 3600);
+      if (hours_since < Re_Trigger_Hours) return;
+   }
 
    string direction = JsonStr(json, "direction");
    StringToUpper(direction);
@@ -168,19 +171,44 @@ void ProcessSignal(string json) {
    if (direction == "BUY"  && !Take_Buy_Signals)  return;
    if (direction == "SELL" && !Take_Sell_Signals) return;
 
-   double sig_entry = JsonNum(json, "entry");
-   double sl        = JsonNum(json, "stop_loss");
-   double tp_final  = JsonNum(json, "tp2");
-   if (sig_entry <= 0 || sl <= 0 || tp_final <= 0) {
-      PrintFormat("[SKIP] invalid prices entry=%.2f sl=%.2f tp=%.2f", sig_entry, sl, tp_final);
-      g_last_signal_id = signal_id;
-      return;
-   }
+   // Read RELATIVE distances. Fallback to legacy absolute prices if not present.
+   double stop_pts = JsonNum(json, "stop_distance_points");
+   double tp_pts   = JsonNum(json, "tp_distance_points");
 
    g_sym.RefreshRates();
    double entry_now = (direction == "BUY") ? g_sym.Ask() : g_sym.Bid();
+   double point = g_sym.Point();
+
+   double sl, tp_final;
+   if (stop_pts > 0 && tp_pts > 0) {
+      // Relative mode (preferred — works at any price level)
+      if (direction == "BUY") {
+         sl       = entry_now - stop_pts * point;
+         tp_final = entry_now + tp_pts   * point;
+      } else {
+         sl       = entry_now + stop_pts * point;
+         tp_final = entry_now - tp_pts   * point;
+      }
+   } else {
+      // Legacy absolute-prices mode (won't work if signal prices don't match tester era)
+      double sig_entry = JsonNum(json, "entry");
+      sl       = JsonNum(json, "stop_loss");
+      tp_final = JsonNum(json, "tp2");
+      if (sig_entry <= 0 || sl <= 0 || tp_final <= 0) {
+         PrintFormat("[SKIP] signal needs either stop_distance_points/tp_distance_points OR entry/stop_loss/tp2 fields");
+         return;
+      }
+      // Detect: are absolute prices wildly out of sync with current market?
+      double drift = MathAbs(sig_entry - entry_now) / entry_now;
+      if (drift > 0.10) {
+         PrintFormat("[SKIP] signal entry %.2f is %.0f%% off market %.2f. Use stop_distance_points/tp_distance_points fields instead.",
+                     sig_entry, drift*100, entry_now);
+         return;
+      }
+   }
+
    double stop_distance = MathAbs(entry_now - sl);
-   if (stop_distance <= 0) return;
+   if (stop_distance <= 0) { Print("[SKIP] zero stop distance"); return; }
 
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
    double risk_amt = balance * Risk_Percent / 100.0;
@@ -190,7 +218,6 @@ void ProcessSignal(string json) {
    double tick_size  = g_sym.TickSize();
    if (tick_value <= 0 || tick_size <= 0) {
       Print("[SKIP] bad symbol tick info");
-      g_last_signal_id = signal_id;
       return;
    }
    double risk_per_lot = (stop_distance / tick_size) * tick_value;
@@ -204,24 +231,24 @@ void ProcessSignal(string json) {
    lots = MathMax(Min_Lot, MathMin(Max_Lot, lots));
 
    double final_risk = (stop_distance / tick_size) * tick_value * lots;
-   PrintFormat("[OPEN] %s %s @ %.2f SL=%.2f TP=%.2f lots=%.2f risk=$%.2f bal=$%.2f sid=%s",
-               direction, g_symbol, entry_now, sl, tp_final, lots, final_risk, balance, signal_id);
+   PrintFormat("[OPEN] %s %s @ %.2f SL=%.2f TP=%.2f lots=%.2f risk=$%.2f bal=$%.2f",
+               direction, g_symbol, entry_now, sl, tp_final, lots, final_risk, balance);
 
    bool ok = false;
-   string comment = Trade_Comment + ":" + signal_id;
+   string comment = Trade_Comment;
    if (direction == "BUY") {
       ok = g_trade.Buy(lots, g_symbol, 0, sl, tp_final, comment);
    } else {
       ok = g_trade.Sell(lots, g_symbol, 0, sl, tp_final, comment);
    }
    if (!ok) {
-      PrintFormat("[OPEN FAIL] retcode=%d msg=%s",
-                  g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription());
+      PrintFormat("[OPEN FAIL] retcode=%d msg=%s | tried lots=%.2f sl=%.2f tp=%.2f",
+                  g_trade.ResultRetcode(), g_trade.ResultRetcodeDescription(), lots, sl, tp_final);
       return;
    }
    ulong ticket = g_trade.ResultOrder();
    RegisterPosition(ticket, entry_now, sl, lots, stop_distance);
-   g_last_signal_id = signal_id;
+   g_last_trigger_at = TimeCurrent();
    g_today_trades++;
 }
 
