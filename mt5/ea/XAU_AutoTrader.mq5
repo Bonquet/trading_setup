@@ -19,6 +19,7 @@ input group "Connection"
 input string  Signal_URL          = "https://raw.githubusercontent.com/Bonquet/trading_setup/main/data/signals/latest.json";
 input int     Poll_Seconds        = 30;
 input string  Symbol_Override     = "";        // empty = chart symbol (XAUUSD, GOLD, XAUUSD.r, etc.)
+input string  Test_Mode_File      = "";        // If set, read signals from MQL5/Files/<this> instead of URL. Works in Strategy Tester. e.g. "test_signal.json"
 
 input group "Risk"
 input double  Risk_Percent        = 1.0;       // % of balance to risk per trade
@@ -122,6 +123,9 @@ void OnTick() {
 
 //==================== Signal fetch ==============================//
 string FetchSignalJSON() {
+   // Test mode — read from local file. Works in Strategy Tester (WebRequest doesn't).
+   if (Test_Mode_File != "") return ReadFileSignal();
+
    char data[];
    char result[];
    string result_headers;
@@ -129,8 +133,24 @@ string FetchSignalJSON() {
    int timeout = 5000;
    int code = WebRequest("GET", Signal_URL, "", "", timeout, data, 0, result, result_headers);
    if (code == -1) {
-      PrintFormat("[FETCH] WebRequest error %d. URL probably not whitelisted: %s",
-                  GetLastError(), Signal_URL);
+      int err = GetLastError();
+      if (err == 4014) {
+         // ERR_FUNCTION_NOT_ALLOWED. Two causes:
+         // 1. Strategy Tester (WebRequest is permanently blocked there)
+         // 2. Live: 'Allow WebRequest for listed URL' unticked entirely
+         if (MQLInfoInteger(MQL_TESTER)) {
+            Print("[FETCH] You are in the Strategy Tester — WebRequest is BLOCKED here.");
+            Print("        Set Test_Mode_File input to a filename in MQL5/Files/ to test.");
+         } else {
+            Print("[FETCH] WebRequest is disabled. Open MT5 Tools -> Options -> Expert Advisors,");
+            Print("        tick 'Allow WebRequest for listed URL', add https://raw.githubusercontent.com");
+         }
+      } else if (err == 4060) {
+         PrintFormat("[FETCH] URL not in the allowed list: %s", Signal_URL);
+         Print("        Add https://raw.githubusercontent.com under Tools -> Options -> Expert Advisors");
+      } else {
+         PrintFormat("[FETCH] WebRequest error %d on %s", err, Signal_URL);
+      }
       return "";
    }
    if (code != 200) {
@@ -138,6 +158,25 @@ string FetchSignalJSON() {
       return "";
    }
    return CharArrayToString(result, 0, -1, CP_UTF8);
+}
+
+string ReadFileSignal() {
+   // Read MQL5/Files/<Test_Mode_File>. Returns "" on failure.
+   int flags = FILE_READ | FILE_TXT | FILE_ANSI | FILE_SHARE_READ;
+   int h = FileOpen(Test_Mode_File, flags);
+   if (h == INVALID_HANDLE) {
+      static datetime last_warn = 0;
+      if (TimeCurrent() - last_warn > 60) {
+         PrintFormat("[FETCH] Test_Mode_File '%s' not found in MQL5/Files/. err=%d",
+                     Test_Mode_File, GetLastError());
+         last_warn = TimeCurrent();
+      }
+      return "";
+   }
+   string content = "";
+   while (!FileIsEnding(h)) content += FileReadString(h) + "\n";
+   FileClose(h);
+   return content;
 }
 
 //==================== JSON helpers (string scan; only what we need) =====//

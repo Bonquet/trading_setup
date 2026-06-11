@@ -1,0 +1,5 @@
+{
+  "decision": "No Trade",
+  "reason": "TEST - no trade, EA should ignore",
+  "published_at_utc": "2099-12-31T23:59:59Z"
+}
