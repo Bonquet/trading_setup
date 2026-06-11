@@ -246,8 +246,9 @@ As price moves favorably:
 |---|---|---|
 | `Direction_Mode` | `Alternating` | `BuyOnly`, `SellOnly`, `Random`, or `Alternating` |
 | `Re_Trigger_Hours` | 24 | Lower = more trades per backtest, higher = fewer/cleaner |
-| `Use_ATR_Stop` | false | If true, stop = 1.5× H1 ATR (volatility-adaptive) |
-| `Stop_Distance_Points` | 300 | Fixed point stop when `Use_ATR_Stop=false` (300 = $3 on XAU) |
+| `Use_ATR_Stop` | **true** | Adaptive: stop = `ATR_Mult × H1 ATR`. Recommended for realistic XAU volatility (typically $10–25 stops). |
+| `ATR_Mult` | 1.5 | Multiplier when `Use_ATR_Stop=true` |
+| `Stop_Distance_Dollars` | 20.0 | Flat $ stop when `Use_ATR_Stop=false`. **In real dollars on XAU price**, not "points". 20.0 = $20 stop. |
 | `TP_R_Multiple` | 2.0 | Target as N × stop distance |
 | `BE_Trigger_R` | 1.0 | At what R-multiple the SL moves to BE |
 | `Partial_R` | 1.5 | At what R-multiple to take 50% off |

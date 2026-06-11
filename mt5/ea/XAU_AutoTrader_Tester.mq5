@@ -21,9 +21,9 @@
 input group "Signal generator (internal — no file needed)"
 input string  Direction_Mode      = "Alternating";   // "Alternating" | "Random" | "BuyOnly" | "SellOnly"
 input int     Re_Trigger_Hours    = 24;              // how often to open a new test trade
-input bool    Use_ATR_Stop        = false;           // if true, SL = ATR_Mult x H1 ATR; if false, use Stop_Distance_Points
-input double  ATR_Mult            = 1.5;
-input int     Stop_Distance_Points= 300;             // used when Use_ATR_Stop=false (300 = $3 on XAU)
+input bool    Use_ATR_Stop        = true;            // if true, SL = ATR_Mult x H1 ATR (volatility-adaptive); if false, use fixed Stop_Distance_Dollars
+input double  ATR_Mult            = 1.5;             // when Use_ATR_Stop=true; 1.5x H1 ATR is typical swing stop
+input double  Stop_Distance_Dollars = 20.0;          // when Use_ATR_Stop=false; direct $ distance (e.g. 20.0 = $20 stop on XAU)
 input double  TP_R_Multiple       = 2.0;             // TP at this R multiple of stop
 
 input group "Risk"
@@ -86,7 +86,7 @@ int OnInit() {
                g_symbol, Risk_Percent, Magic_Number, Direction_Mode, Re_Trigger_Hours);
    PrintFormat("[INIT] Stop=%s, TP=%.1fR",
                Use_ATR_Stop ? StringFormat("%.1fx H1 ATR", ATR_Mult)
-                            : StringFormat("%d points", Stop_Distance_Points),
+                            : StringFormat("$%.2f flat", Stop_Distance_Dollars),
                TP_R_Multiple);
    PrintFormat("[INIT] Trade mgmt: BE@+%.1fR | Partial %.0f%% @+%.1fR | Trail %.1fxATR after partial",
                BE_Trigger_R, Partial_Percent, Partial_R, Trail_ATR_Mult);
@@ -126,7 +126,7 @@ void TryOpenTrade() {
    double point = g_sym.Point();
    double entry_now = (dir == "BUY") ? g_sym.Ask() : g_sym.Bid();
 
-   // Compute stop distance (price units)
+   // Compute stop distance in PRICE units ($ on XAU)
    double stop_distance;
    if (Use_ATR_Stop) {
       double atr = GetH1ATR();
@@ -136,9 +136,17 @@ void TryOpenTrade() {
       }
       stop_distance = atr * ATR_Mult;
    } else {
-      stop_distance = Stop_Distance_Points * point;
+      stop_distance = Stop_Distance_Dollars;  // direct $ value (e.g. 20.0 = $20 stop on XAU)
    }
    if (stop_distance <= 0) return;
+
+   // Sanity check: stop must respect broker's minimum stop distance
+   double min_stop_price = g_sym.StopsLevel() * g_sym.Point();
+   if (min_stop_price > 0 && stop_distance < min_stop_price) {
+      PrintFormat("[SKIP] stop $%.2f below broker minimum $%.2f. Increase Stop_Distance_Dollars or ATR_Mult.",
+                  stop_distance, min_stop_price);
+      return;
+   }
 
    double sl       = (dir == "BUY") ? entry_now - stop_distance : entry_now + stop_distance;
    double tp_final = (dir == "BUY") ? entry_now + stop_distance * TP_R_Multiple
