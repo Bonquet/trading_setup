@@ -27,6 +27,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SIGNAL = ROOT / "data" / "cache" / "signal.json"
+# Mirror of the latest signal in a TRACKED path so the EA can fetch it from
+# raw.githubusercontent.com (data/cache/ is gitignored, data/signals/ is not).
+SIGNAL_PUB = ROOT / "data" / "signals" / "latest.json"
+SIGNAL_PUB_HIST_DIR = ROOT / "data" / "signals" / "history"
 JOURNAL = ROOT / "journal" / "trades.md"
 
 
@@ -159,6 +163,26 @@ def resolve_account(cli_arg: str) -> tuple[str, dict]:
     }
 
 
+def publish_signal_for_ea(sig: dict, session: str, acct_name: str) -> None:
+    """Write the latest signal to a tracked path the EA can fetch from GitHub raw URL.
+    Adds a stable signal_id so the EA can deduplicate.
+    """
+    import uuid
+    SIGNAL_PUB.parent.mkdir(parents=True, exist_ok=True)
+    SIGNAL_PUB_HIST_DIR.mkdir(parents=True, exist_ok=True)
+    payload = dict(sig)
+    # signal_id = ISO timestamp + uuid so it's unique even on rapid re-runs
+    sid = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:8]}"
+    payload["signal_id"] = sid
+    payload["published_at_utc"] = datetime.now(timezone.utc).isoformat()
+    payload["session"] = session
+    payload["account_name"] = acct_name
+    SIGNAL_PUB.write_text(json.dumps(payload, indent=2, default=str))
+    # Append to history
+    hist = SIGNAL_PUB_HIST_DIR / f"{sid}.json"
+    hist.write_text(json.dumps(payload, indent=2, default=str))
+
+
 def build_no_trade_message(session: str, levels: dict, signal_payload: dict, acct_name: str, balance: float) -> str:
     """Diagnostic message for on-demand /best /london /ny that get No Trade."""
     spot = levels.get("spot") or levels.get("spot_price")
@@ -225,6 +249,11 @@ def main() -> None:
         return
 
     sig = json.loads(SIGNAL.read_text())
+    # Publish to tracked path for the EA to pick up via raw.githubusercontent.com
+    try:
+        publish_signal_for_ea(sig, session, acct_name)
+    except Exception as e:  # noqa: BLE001
+        print(f"(publish_signal_for_ea failed: {e} — non-fatal)")
     levels_data = None
     try:
         levels_data = json.loads((ROOT / "data" / "cache" / "levels.json").read_text())
