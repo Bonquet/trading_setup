@@ -1,10 +1,14 @@
 //+------------------------------------------------------------------+
-//|                                                XAU_AutoTrader.mq5 |
-//|                 Auto-executor for github.com/Bonquet/trading_setup |
+//|                                          XAU_AutoTrader_Tester.mq5 |
+//|        STRATEGY TESTER VERSION — file-based signal input only      |
 //|                                                                    |
-//| Polls GitHub raw URL for signals → opens market orders with the    |
-//| signal's SL/TP → manages position (BE at +1R, partial at +1.5R,    |
-//| trail SL after partial). Reads CURRENT MT5 balance for sizing.     |
+//| Same trade-execution and management logic as XAU_AutoTrader.mq5    |
+//| (BE at +1R, partial close at +1.5R, trail SL by 0.5xH1 ATR after   |
+//| partial), BUT signals come from a LOCAL FILE in MQL5/Files/ instead |
+//| of WebRequest. Works in Strategy Tester (WebRequest is blocked     |
+//| there); use this to validate trade management before going live.   |
+//|                                                                    |
+//| For live trading, use XAU_AutoTrader.mq5 (the production version). |
 //+------------------------------------------------------------------+
 #property copyright "trading_setup"
 #property version   "1.00"
@@ -15,37 +19,36 @@
 #include <Trade/SymbolInfo.mqh>
 
 //==================== Inputs ====================================//
-input group "Connection"
-input string  Signal_URL          = "https://raw.githubusercontent.com/Bonquet/trading_setup/main/data/signals/latest.json";
+input group "Signal Source (file-based — works in Strategy Tester)"
+input string  Signal_File         = "test_signal_buy.json";   // file in MQL5/Files/
 input int     Poll_Seconds        = 30;
-input string  Symbol_Override     = "";        // empty = chart symbol (XAUUSD, GOLD, XAUUSD.r, etc.)
+input string  Symbol_Override     = "";                        // empty = chart symbol
 
 input group "Risk"
-input double  Risk_Percent        = 1.0;       // % of balance to risk per trade
-input double  Max_Risk_USD        = 0.0;       // hard $ cap (0 = no cap)
-input double  Min_Lot             = 0.01;      // minimum lot to bother trading
-input double  Max_Lot             = 1.00;      // safety max
+input double  Risk_Percent        = 1.0;
+input double  Max_Risk_USD        = 0.0;
+input double  Min_Lot             = 0.01;
+input double  Max_Lot             = 1.00;
 input int     Max_Trades_Per_Day  = 5;
-input int     Max_Open_Positions  = 1;          // for THIS EA's magic number
+input int     Max_Open_Positions  = 1;
 
 input group "Signal Filters"
-input int     Max_Signal_Age_Sec  = 1800;       // skip if signal older than this
+input int     Max_Signal_Age_Sec  = 0;          // 0 = ignore age check (good for tester)
 input bool    Take_Buy_Signals    = true;
 input bool    Take_Sell_Signals   = true;
-input string  Required_Styles     = "swing,intraday,scalp";  // CSV; empty = all
 
 input group "Trade Management"
-input double  BE_Trigger_R        = 1.0;        // R multiple to move SL to break-even
-input double  BE_Buffer_Points    = 2.0;        // small buffer past entry (spread cover)
+input double  BE_Trigger_R        = 1.0;
+input double  BE_Buffer_Points    = 2.0;
 input bool    Use_Partial_Close   = true;
-input double  Partial_R           = 1.5;        // R multiple to close partial
-input double  Partial_Percent     = 50.0;       // % of position to close
+input double  Partial_R           = 1.5;
+input double  Partial_Percent     = 50.0;
 input bool    Use_Trailing        = true;
-input double  Trail_ATR_Mult      = 0.5;        // trail by N × H1 ATR after partial
+input double  Trail_ATR_Mult      = 0.5;
 
 input group "Identity"
-input long    Magic_Number        = 4040405;
-input string  Trade_Comment       = "xau-autotrader";
+input long    Magic_Number        = 4040406;    // different from production EA
+input string  Trade_Comment       = "xau-tester";
 
 //==================== Globals ===================================//
 CTrade         g_trade;
@@ -53,13 +56,11 @@ CPositionInfo  g_pos;
 CSymbolInfo    g_sym;
 
 string         g_symbol;
-datetime       g_last_poll        = 0;
 string         g_last_signal_id   = "";
 int            g_today_trades     = 0;
 datetime       g_today_date       = 0;
+datetime       g_last_poll        = 0;
 
-// Per-position state (keyed by ticket via comment hashing or just by checking SL position)
-// We track:  ticket -> { be_done, partial_done, original_sl, original_risk }
 struct PosState {
    ulong  ticket;
    bool   be_done;
@@ -75,7 +76,7 @@ PosState g_states[];
 int OnInit() {
    g_symbol = (Symbol_Override == "") ? _Symbol : Symbol_Override;
    if (!g_sym.Name(g_symbol)) {
-      PrintFormat("[INIT] Symbol '%s' not found. Set Symbol_Override.", g_symbol);
+      PrintFormat("[INIT] Symbol '%s' not found.", g_symbol);
       return INIT_FAILED;
    }
    g_sym.RefreshRates();
@@ -84,64 +85,48 @@ int OnInit() {
    g_trade.SetTypeFillingBySymbol(g_symbol);
    g_trade.LogLevel(LOG_LEVEL_ERRORS);
 
-   if (!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED)) {
-      Print("[INIT] AutoTrading disabled in terminal. Click the AutoTrading button.");
-   }
-   LoadStateFromFile();
-   EventSetTimer(MathMax(5, Poll_Seconds));
-   PrintFormat("[INIT] XAU AutoTrader live on %s | risk=%.1f%% | poll=%ds | magic=%I64d",
-               g_symbol, Risk_Percent, Poll_Seconds, Magic_Number);
-   PrintFormat("[INIT] Signal source: %s", Signal_URL);
-   PrintFormat("[INIT] If WebRequest fails, add the URL host in:");
-   Print("       Tools -> Options -> Expert Advisors -> 'Allow WebRequest for listed URL'");
-   Print("       Add: https://raw.githubusercontent.com");
+   PrintFormat("[INIT] TESTER mode on %s | risk=%.1f%% | magic=%I64d | signal file: %s",
+               g_symbol, Risk_Percent, Magic_Number, Signal_File);
    return INIT_SUCCEEDED;
 }
 
 void OnDeinit(const int reason) {
-   EventKillTimer();
-   SaveStateToFile();
    PrintFormat("[DEINIT] reason=%d", reason);
 }
 
-//==================== Timer (signal poll) =======================//
-void OnTimer() {
-   ResetDailyCounterIfNewDay();
-   if (CountMyOpenPositions() >= Max_Open_Positions) return;
-   if (g_today_trades >= Max_Trades_Per_Day) return;
-
-   string json = FetchSignalJSON();
-   if (json == "") return;
-   ProcessSignal(json);
-}
-
-//==================== Tick (trade management) ===================//
+//==================== Tick (poll + manage) ======================//
 void OnTick() {
+   // Poll the signal file at most every Poll_Seconds, regardless of tick frequency
+   if (TimeCurrent() - g_last_poll >= Poll_Seconds) {
+      g_last_poll = TimeCurrent();
+      ResetDailyCounterIfNewDay();
+      if (CountMyOpenPositions() < Max_Open_Positions && g_today_trades < Max_Trades_Per_Day) {
+         string json = ReadSignalFile();
+         if (json != "") ProcessSignal(json);
+      }
+   }
    ManageOpenPositions();
 }
 
-//==================== Signal fetch ==============================//
-string FetchSignalJSON() {
-   char data[];
-   char result[];
-   string result_headers;
-   ResetLastError();
-   int timeout = 5000;
-   int code = WebRequest("GET", Signal_URL, "", "", timeout, data, 0, result, result_headers);
-   if (code == -1) {
-      PrintFormat("[FETCH] WebRequest error %d. Whitelist %s in Tools -> Options -> Expert Advisors.",
-                  GetLastError(), Signal_URL);
+//==================== Signal file read ==========================//
+string ReadSignalFile() {
+   int flags = FILE_READ | FILE_TXT | FILE_ANSI | FILE_SHARE_READ;
+   int h = FileOpen(Signal_File, flags);
+   if (h == INVALID_HANDLE) {
+      static datetime last_warn = 0;
+      if (TimeCurrent() - last_warn > 120) {
+         PrintFormat("[FILE] '%s' not found in MQL5/Files/", Signal_File);
+         last_warn = TimeCurrent();
+      }
       return "";
    }
-   if (code != 200) {
-      PrintFormat("[FETCH] HTTP %d", code);
-      return "";
-   }
-   return CharArrayToString(result, 0, -1, CP_UTF8);
+   string content = "";
+   while (!FileIsEnding(h)) content += FileReadString(h) + "\n";
+   FileClose(h);
+   return content;
 }
 
-//==================== JSON helpers (string scan; only what we need) =====//
-// Extract a string field by key. Handles "key": "value" patterns.
+//==================== JSON helpers ==============================//
 string JsonStr(string json, string key) {
    string pat = "\"" + key + "\"";
    int p = StringFind(json, pat);
@@ -165,10 +150,7 @@ string JsonStr(string json, string key) {
    if (end < 0) return "";
    return StringSubstr(json, p, end - p);
 }
-double JsonNum(string json, string key) {
-   string v = JsonStr(json, key);
-   return StringToDouble(v);
-}
+double JsonNum(string json, string key) { return StringToDouble(JsonStr(json, key)); }
 
 //==================== Process incoming signal ===================//
 void ProcessSignal(string json) {
@@ -186,46 +168,20 @@ void ProcessSignal(string json) {
    if (direction == "BUY"  && !Take_Buy_Signals)  return;
    if (direction == "SELL" && !Take_Sell_Signals) return;
 
-   // Style filter
-   if (Required_Styles != "") {
-      string style = JsonStr(json, "style");
-      if (StringFind("," + Required_Styles + ",", "," + style + ",") < 0) {
-         PrintFormat("[SKIP] style '%s' not in required list", style);
-         g_last_signal_id = signal_id;  // mark seen so we don't recheck
-         return;
-      }
-   }
-
-   // Freshness
-   string published = JsonStr(json, "published_at_utc");
-   if (published == "") published = JsonStr(json, "fetched_at_utc");
-   datetime pub_dt = ParseISO8601(published);
-   if (pub_dt > 0) {
-      int age = (int)(TimeGMT() - pub_dt);
-      if (age > Max_Signal_Age_Sec) {
-         PrintFormat("[SKIP] signal age %ds > max %ds", age, Max_Signal_Age_Sec);
-         g_last_signal_id = signal_id;
-         return;
-      }
-   }
-
    double sig_entry = JsonNum(json, "entry");
    double sl        = JsonNum(json, "stop_loss");
    double tp_final  = JsonNum(json, "tp2");
-   double tp1       = JsonNum(json, "tp1");
    if (sig_entry <= 0 || sl <= 0 || tp_final <= 0) {
       PrintFormat("[SKIP] invalid prices entry=%.2f sl=%.2f tp=%.2f", sig_entry, sl, tp_final);
       g_last_signal_id = signal_id;
       return;
    }
 
-   // Use current market price (not the signal's snapshot — it may have moved)
    g_sym.RefreshRates();
    double entry_now = (direction == "BUY") ? g_sym.Ask() : g_sym.Bid();
    double stop_distance = MathAbs(entry_now - sl);
    if (stop_distance <= 0) return;
 
-   // Lot sizing from CURRENT MT5 balance
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
    double risk_amt = balance * Risk_Percent / 100.0;
    if (Max_Risk_USD > 0 && risk_amt > Max_Risk_USD) risk_amt = Max_Risk_USD;
@@ -267,7 +223,6 @@ void ProcessSignal(string json) {
    RegisterPosition(ticket, entry_now, sl, lots, stop_distance);
    g_last_signal_id = signal_id;
    g_today_trades++;
-   SaveStateToFile();
 }
 
 //==================== Trade management ==========================//
@@ -281,7 +236,6 @@ void ManageOpenPositions() {
       ulong ticket = g_pos.Ticket();
       int   sidx   = FindStateIdx(ticket);
       if (sidx < 0) {
-         // First time seeing this position — register from current state
          RegisterPosition(ticket, g_pos.PriceOpen(), g_pos.StopLoss(), g_pos.Volume(),
                           MathAbs(g_pos.PriceOpen() - g_pos.StopLoss()));
          sidx = FindStateIdx(ticket);
@@ -289,7 +243,6 @@ void ManageOpenPositions() {
       }
 
       double entry        = g_states[sidx].original_entry;
-      double original_sl  = g_states[sidx].original_sl;
       double original_risk= g_states[sidx].original_risk;
       bool   is_buy       = (g_pos.PositionType() == POSITION_TYPE_BUY);
 
@@ -298,48 +251,41 @@ void ManageOpenPositions() {
       double favorable = is_buy ? (price - entry) : (entry - price);
       double r_multiple = (original_risk > 0) ? favorable / original_risk : 0;
 
-      // 1. Move to break-even at +BE_Trigger_R
       if (!g_states[sidx].be_done && r_multiple >= BE_Trigger_R) {
          double buf = BE_Buffer_Points * g_sym.Point();
          double new_sl = is_buy ? entry + buf : entry - buf;
          if (g_trade.PositionModify(ticket, new_sl, g_pos.TakeProfit())) {
             g_states[sidx].be_done = true;
-            PrintFormat("[BE] ticket=%I64u moved SL to BE %.2f at +%.2fR", ticket, new_sl, r_multiple);
-            SaveStateToFile();
+            PrintFormat("[BE] ticket=%I64u SL->BE %.2f at +%.2fR", ticket, new_sl, r_multiple);
          }
       }
 
-      // 2. Partial close at +Partial_R
       if (Use_Partial_Close && !g_states[sidx].partial_done && r_multiple >= Partial_R) {
          double close_vol = NormalizeVolume(g_pos.Volume() * (Partial_Percent / 100.0));
          if (close_vol >= g_sym.LotsMin() && close_vol < g_pos.Volume()) {
             if (g_trade.PositionClosePartial(ticket, close_vol)) {
                g_states[sidx].partial_done = true;
                PrintFormat("[PARTIAL] ticket=%I64u closed %.2f at +%.2fR", ticket, close_vol, r_multiple);
-               SaveStateToFile();
             }
          }
       }
 
-      // 3. Trail SL after partial close
       if (Use_Trailing && g_states[sidx].partial_done) {
-         double atr = iATR(g_symbol, PERIOD_H1, 14);
+         int atr_handle = iATR(g_symbol, PERIOD_H1, 14);
          double atr_val[];
          ArraySetAsSeries(atr_val, true);
-         if (CopyBuffer((int)atr, 0, 0, 1, atr_val) > 0) {
+         if (CopyBuffer(atr_handle, 0, 0, 1, atr_val) > 0) {
             double trail_dist = atr_val[0] * Trail_ATR_Mult;
             double new_sl = is_buy ? price - trail_dist : price + trail_dist;
             double cur_sl = g_pos.StopLoss();
             bool improves = is_buy ? (new_sl > cur_sl) : (new_sl < cur_sl);
-            if (improves) {
-               g_trade.PositionModify(ticket, new_sl, g_pos.TakeProfit());
-            }
+            if (improves) g_trade.PositionModify(ticket, new_sl, g_pos.TakeProfit());
          }
       }
    }
 }
 
-//==================== State helpers =============================//
+//==================== Helpers ===================================//
 int FindStateIdx(ulong ticket) {
    for (int i = 0; i < ArraySize(g_states); i++)
       if (g_states[i].ticket == ticket) return i;
@@ -369,7 +315,7 @@ int CountMyOpenPositions() {
 
 void ResetDailyCounterIfNewDay() {
    MqlDateTime dt;
-   TimeToStruct(TimeGMT(), dt);
+   TimeToStruct(TimeCurrent(), dt);
    datetime today_at_midnight = StringToTime(StringFormat("%04d.%02d.%02d 00:00", dt.year, dt.mon, dt.day));
    if (g_today_date != today_at_midnight) {
       g_today_date = today_at_midnight;
@@ -385,50 +331,5 @@ double NormalizeVolume(double vol) {
    double max_v = g_sym.LotsMax();
    vol = MathMax(min_v, MathMin(max_v, vol));
    return vol;
-}
-
-datetime ParseISO8601(string s) {
-   // Accepts YYYY-MM-DDTHH:MM:SSZ or YYYY-MM-DDTHH:MM:SS+00:00
-   if (StringLen(s) < 19) return 0;
-   int y = (int)StringToInteger(StringSubstr(s, 0, 4));
-   int mo = (int)StringToInteger(StringSubstr(s, 5, 2));
-   int d = (int)StringToInteger(StringSubstr(s, 8, 2));
-   int h = (int)StringToInteger(StringSubstr(s, 11, 2));
-   int mi = (int)StringToInteger(StringSubstr(s, 14, 2));
-   int sec = (int)StringToInteger(StringSubstr(s, 17, 2));
-   if (y == 0) return 0;
-   return StringToTime(StringFormat("%04d.%02d.%02d %02d:%02d:%02d", y, mo, d, h, mi, sec));
-}
-
-//==================== Persistent state on disk ==================//
-string StateFilename() { return "xau_autotrader_state.txt"; }
-
-void SaveStateToFile() {
-   int h = FileOpen(StateFilename(), FILE_WRITE | FILE_TXT | FILE_ANSI);
-   if (h == INVALID_HANDLE) return;
-   FileWriteString(h, "last_signal_id=" + g_last_signal_id + "\n");
-   FileWriteString(h, "today_date=" + IntegerToString((long)g_today_date) + "\n");
-   FileWriteString(h, "today_trades=" + IntegerToString(g_today_trades) + "\n");
-   FileClose(h);
-}
-
-void LoadStateFromFile() {
-   if (!FileIsExist(StateFilename())) return;
-   int h = FileOpen(StateFilename(), FILE_READ | FILE_TXT | FILE_ANSI);
-   if (h == INVALID_HANDLE) return;
-   while (!FileIsEnding(h)) {
-      string line = FileReadString(h);
-      int eq = StringFind(line, "=");
-      if (eq < 0) continue;
-      string k = StringSubstr(line, 0, eq);
-      string v = StringSubstr(line, eq + 1);
-      StringTrimRight(v);
-      if (k == "last_signal_id") g_last_signal_id = v;
-      else if (k == "today_date") g_today_date = (datetime)StringToInteger(v);
-      else if (k == "today_trades") g_today_trades = (int)StringToInteger(v);
-   }
-   FileClose(h);
-   PrintFormat("[STATE] loaded last_signal_id=%s today_trades=%d",
-               g_last_signal_id, g_today_trades);
 }
 //+------------------------------------------------------------------+

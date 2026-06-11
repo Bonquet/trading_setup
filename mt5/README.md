@@ -191,71 +191,87 @@ The bot's WhatsApp signals continue regardless — they're not coupled to the EA
 - For the most conservative prop firm interpretation, run the EA with `Required_Styles=swing` only (H4 setups, low frequency) and set `Max_Trades_Per_Day=2` to look like a discretionary swing trader.
 - Don't run multiple instances of this EA on multiple accounts with the same magic number — it'll get confused. Change the Magic_Number per chart if you do.
 
-## Testing the EA (Strategy Tester + Demo)
+## Two EA files — production vs tester
 
-`WebRequest()` is permanently blocked in the Strategy Tester — you can't backtest the live URL fetch path. But you CAN test everything else (entry, SL/TP placement, BE at +1R, partial close at +1.5R, trailing) using **Test Mode**.
+| File | Purpose | Signal source | Where to run |
+|---|---|---|---|
+| **`XAU_AutoTrader.mq5`** | Live production | `WebRequest()` from GitHub raw URL | Live or demo chart |
+| **`XAU_AutoTrader_Tester.mq5`** | Strategy Tester validation | Local file `MQL5/Files/<filename>` | Strategy Tester OR live chart |
 
-### Test Mode setup
+Both have **identical trade-management logic** (BE at +1R, partial 50% at +1.5R, trail SL by 0.5×H1 ATR after partial). Only the signal source differs.
 
-1. **Copy a test signal file into MT5's Files folder:**
-   - File → Open Data Folder → navigate to `MQL5\Files\`
+The tester EA uses **Magic Number 4040406** to keep its positions separate from the live EA (Magic 4040405). You can have both attached to different charts without interference.
+
+## Testing in the Strategy Tester
+
+`WebRequest()` is permanently blocked in MT5's Strategy Tester — that's an MT5 design limitation, no setting fixes it. Use `XAU_AutoTrader_Tester.mq5` instead. It reads signals from a local file, which works in the tester.
+
+### Steps
+
+1. **Copy a test signal into MT5's Files folder:**
+   - In MT5: **File → Open Data Folder** → navigate to `MQL5\Files\`
    - Copy `mt5/test_signals/test_signal_buy.json` (or `_sell.json`) from this repo into that folder
+   - You can also create your own — just match the JSON shape
 
-2. **Attach the EA** (either to a live chart OR in Strategy Tester):
-   - In the input dialog, set `Test_Mode_File` = `test_signal_buy.json`
-   - Other inputs as normal
-   - Click OK
+2. **Compile the tester EA:**
+   - In MetaEditor: open `XAU_AutoTrader_Tester.mq5` → F7
 
-3. **Watch the EA pick up the test signal:**
-   - In Experts tab, you should see `[OPEN] BUY XAUUSD @ ...`
-   - The EA will use the signal's SL/TP but recalculate lots from current account balance + Risk_Percent
-   - Manage the resulting position (BE / partial / trail) just like a real signal
+3. **Run the Strategy Tester:**
+   - Ctrl+R → Strategy Tester opens
+   - **Expert**: `XAU_AutoTrader_Tester`
+   - **Symbol**: XAUUSD (or your broker's gold)
+   - **Period**: M15 or H1 — doesn't matter much
+   - **Modeling**: Every tick based on real ticks
+   - **Inputs tab** → `Signal_File` = `test_signal_buy.json` (default)
+   - **Start**
 
-4. **To simulate a "No Trade" condition:**
-   - Use `test_signal_notrade.json` — EA reads it, sees `"decision": "No Trade"`, does nothing
+You should see in the journal:
+```
+[INIT] TESTER mode on XAUUSD | risk=1.0% | magic=4040406 | signal file: test_signal_buy.json
+[OPEN] BUY XAUUSD @ 4XXX.XX SL=4680.00 TP=4740.00 lots=0.05 risk=$XX.XX bal=$XXXX.XX sid=TEST_BUY_001
+```
 
-5. **To re-trigger after the EA processes it:**
-   - The EA tracks `signal_id` to prevent duplicates. Edit the file and change `"signal_id": "TEST_BUY_001"` to `"TEST_BUY_002"`. Save. EA picks it up on next poll.
+Then as the tester replays ticks:
+```
+[BE] ticket=XXXX SL->BE 4XXX.XX at +1.00R
+[PARTIAL] ticket=XXXX closed 0.03 at +1.51R
+```
 
-### Strategy Tester workflow
+### Re-triggering inside the tester
 
-1. Press **Ctrl+R** to open Strategy Tester
-2. Expert: `XAU_AutoTrader`
-3. Symbol: XAUUSD (or your broker's gold symbol)
-4. Period: M15 or H1 (doesn't really matter — Test Mode isn't time-dependent)
-5. Modeling: Every tick based on real ticks (most accurate)
-6. Inputs tab → set `Test_Mode_File` = `test_signal_buy.json`
-7. Start
+The EA dedups by `signal_id`. To fire another test trade:
+- Edit `test_signal_buy.json` in `MQL5/Files/`
+- Change `"signal_id": "TEST_BUY_001"` → `"TEST_BUY_002"`
+- Save — the EA picks it up on next poll
 
-The Test Mode reads the file once at the configured `signal_id`, opens a trade, and lets the tester run forward to see how the trade manager handles the position over time.
+### Demo account workflow (closest to production)
 
-**Note**: Strategy Tester's historical data won't include the time when your test_signal was "published" (the timestamp in the JSON). The EA's `Max_Signal_Age_Sec` check might reject the signal as too old. Either:
-- Set `Max_Signal_Age_Sec = 999999999` for testing
-- Or update the JSON's `published_at_utc` to a date within the tester's range
+Strategy Tester is fine for trade-management sanity checks. For full end-to-end validation including the live WebRequest pipeline, use a free demo account:
 
-### Demo account workflow (recommended over Strategy Tester)
+1. **File → Login to Trade Account → Open Demo** (any broker offering XAU)
+2. Attach the **production** `XAU_AutoTrader` to the demo chart
+3. Whitelist `https://raw.githubusercontent.com` (Tools → Options → Expert Advisors)
+4. Send `/best` or `/scalp` from WhatsApp — bot writes a real signal to GitHub
+5. Demo account picks up the signal and opens a trade with demo money
 
-Strategy Tester is fine for sanity-checking trade management. For full end-to-end validation including the WebRequest signal pipeline, use a **demo account**:
-
-1. **File → Login to Trade Account → Open new demo account** (any broker offering XAU)
-2. Attach the EA to the demo account's XAUUSD chart
-3. Leave `Test_Mode_File` empty so it uses live signals from your bot
-4. Trigger `/best` or `/scalp` from your WhatsApp — the bot writes a real signal to GitHub, the EA picks it up on the demo account
-5. Watch real trades execute on demo money
-
-This is closer to production behavior than the Strategy Tester.
+Same flow as live, just no real money at risk.
 
 ## File layout in this repo
 
 ```
 mt5/
-├── README.md                  (this file)
-└── ea/
-    └── XAU_AutoTrader.mq5     (the EA — copy to MT5's Experts/ folder)
+├── README.md                          (this file)
+├── ea/
+│   ├── XAU_AutoTrader.mq5             (PRODUCTION — copy to MQL5/Experts/, uses WebRequest)
+│   └── XAU_AutoTrader_Tester.mq5      (TESTER — copy to MQL5/Experts/, reads local file)
+└── test_signals/
+    ├── test_signal_buy.json           (sample BUY signal — copy to MQL5/Files/)
+    ├── test_signal_sell.json          (sample SELL signal — copy to MQL5/Files/)
+    └── test_signal_notrade.json       (sample No-Trade — EA ignores it)
 
 data/
-├── cache/signal.json          (gitignored — bot's internal cache)
+├── cache/signal.json                  (gitignored — bot's internal cache)
 └── signals/
-    ├── latest.json            (tracked — EA reads from raw.githubusercontent.com)
-    └── history/               (tracked — every signal ever published)
+    ├── latest.json                    (tracked — production EA reads from raw.githubusercontent.com)
+    └── history/                       (tracked — every signal ever published)
 ```
