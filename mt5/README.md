@@ -191,14 +191,32 @@ The bot's WhatsApp signals continue regardless — they're not coupled to the EA
 - For the most conservative prop firm interpretation, run the EA with `Required_Styles=swing` only (H4 setups, low frequency) and set `Max_Trades_Per_Day=2` to look like a discretionary swing trader.
 - Don't run multiple instances of this EA on multiple accounts with the same magic number — it'll get confused. Change the Magic_Number per chart if you do.
 
-## Two EA files — production vs tester
+## Three EA files — purpose-built for different jobs
 
-| File | Purpose | Signal source | Where to run |
+| File | Purpose | Signals come from | Where to run |
 |---|---|---|---|
-| **`XAU_AutoTrader.mq5`** | Live production | `WebRequest()` from GitHub raw URL | Live or demo chart |
-| **`XAU_AutoTrader_Tester.mq5`** | Strategy Tester validation | Local file `MQL5/Files/<filename>` | Strategy Tester OR live chart |
+| **`XAU_AutoTrader.mq5`** | Live trading | Your bot via `WebRequest()` | Real or demo MT5 account |
+| **`XAU_Strategy_Tester.mq5`** | **Backtest your REAL strategy** | Implements 50 EMA Williams rules **inline** | Strategy Tester (no internet needed) |
+| **`XAU_AutoTrader_Tester.mq5`** | Validate trade-mgmt code | Synthetic alternating BUY/SELL every N hours | Strategy Tester (sanity check only) |
 
-Both have **identical trade-management logic** (BE at +1R, partial 50% at +1.5R, trail SL by 0.5×H1 ATR after partial). Only the signal source differs.
+**For meaningful backtest results, use `XAU_Strategy_Tester.mq5`**. It mirrors the rules in `backtest/strategies/ema_williams.py` exactly:
+- Long: Close > 50 EMA-High channel AND Williams %R crosses up through -20 AND Stoch %K > %D AND %K > 60 AND Close > EMA200
+- Short: mirror
+- Stop: recent 10-bar swing ± 0.5 × ATR(14)
+- Target: 2R fixed
+- Time exit: 50 bars
+
+Python backtest results for this exact logic (22 years XAU, 2004–2026):
+
+| TF | Trades | Win% | Expectancy | Profit Factor | Return | Max DD |
+|---|---|---|---|---|---|---|
+| **D1** ⭐ | 104 | **54.8%** | **+0.307R** | **1.82** | +30.9% | **-4.3%** |
+| H4 | 651 | 44.9% | +0.096R | 1.16 | +68.2% | -14.8% |
+| H1 | 2,495 | 43.7% | +0.048R | 1.09 | +168.1% | -26.7% |
+
+Use D1 if you want the highest quality (Sharpe-like) trades. Use H4 if you want more activity. Use H1 for prop firm scaling speed (with accepted higher drawdown).
+
+All EAs share **identical trade-management logic** — BE at +1R, partial 50% at +1.5R, trail SL by 0.5×ATR after partial.
 
 The tester EA uses **Magic Number 4040406** to keep its positions separate from the live EA (Magic 4040405). You can have both attached to different charts without interference.
 
