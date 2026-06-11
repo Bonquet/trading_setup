@@ -204,45 +204,67 @@ The tester EA uses **Magic Number 4040406** to keep its positions separate from 
 
 ## Testing in the Strategy Tester
 
-`WebRequest()` is permanently blocked in MT5's Strategy Tester — that's an MT5 design limitation, no setting fixes it. Use `XAU_AutoTrader_Tester.mq5` instead. It reads signals from a local file, which works in the tester.
+`WebRequest()` is permanently blocked in MT5's Strategy Tester — that's an MT5 design limitation. Use `XAU_AutoTrader_Tester.mq5` instead. It **generates its own synthetic signals internally** — no file, no folder hunt, no JSON setup. Just attach and run.
 
 ### Steps
 
-1. **Copy a test signal into MT5's Files folder:**
-   - In MT5: **File → Open Data Folder** → navigate to `MQL5\Files\`
-   - Copy `mt5/test_signals/test_signal_buy.json` (or `_sell.json`) from this repo into that folder
-   - You can also create your own — just match the JSON shape
-
-2. **Compile the tester EA:**
+1. **Compile the tester EA:**
    - In MetaEditor: open `XAU_AutoTrader_Tester.mq5` → F7
 
-3. **Run the Strategy Tester:**
+2. **Run the Strategy Tester:**
    - Ctrl+R → Strategy Tester opens
    - **Expert**: `XAU_AutoTrader_Tester`
    - **Symbol**: XAUUSD (or your broker's gold)
-   - **Period**: M15 or H1 — doesn't matter much
+   - **Period**: M15 or H1
    - **Modeling**: Every tick based on real ticks
-   - **Inputs tab** → `Signal_File` = `test_signal_buy.json` (default)
+   - **Date range**: pick what you want (e.g. 2024-01-01 → 2024-12-31)
+   - Defaults are fine — alternates BUY/SELL every 24 hours
    - **Start**
 
 You should see in the journal:
 ```
-[INIT] TESTER mode on XAUUSD | risk=1.0% | magic=4040406 | signal file: test_signal_buy.json
-[OPEN] BUY XAUUSD @ 4XXX.XX SL=4680.00 TP=4740.00 lots=0.05 risk=$XX.XX bal=$XXXX.XX sid=TEST_BUY_001
+[INIT] TESTER mode on XAUUSD | risk=1.0% | magic=4040406 | dir_mode=Alternating | trigger=24h
+[INIT] Stop=300 points, TP=2.0R
+[INIT] Trade mgmt: BE@+1.0R | Partial 50% @+1.5R | Trail 0.5xATR after partial
+[OPEN] BUY XAUUSD @ XXXX.XX SL=XXXX.XX TP=XXXX.XX lots=0.0X risk=$XX.XX bal=$XXXX.XX
 ```
 
-Then as the tester replays ticks:
+24h later:
 ```
-[BE] ticket=XXXX SL->BE 4XXX.XX at +1.00R
-[PARTIAL] ticket=XXXX closed 0.03 at +1.51R
+[OPEN] SELL XAUUSD @ XXXX.XX SL=XXXX.XX TP=XXXX.XX ...
 ```
 
-### Re-triggering inside the tester
+As price moves favorably:
+```
+[BE] ticket=XXXX SL->BE XXXX.XX at +1.00R
+[PARTIAL] ticket=XXXX closed 0.0X at +1.51R
+```
 
-The EA dedups by `signal_id`. To fire another test trade:
-- Edit `test_signal_buy.json` in `MQL5/Files/`
-- Change `"signal_id": "TEST_BUY_001"` → `"TEST_BUY_002"`
-- Save — the EA picks it up on next poll
+### Key tester inputs to play with
+
+| Input | Default | What changes |
+|---|---|---|
+| `Direction_Mode` | `Alternating` | `BuyOnly`, `SellOnly`, `Random`, or `Alternating` |
+| `Re_Trigger_Hours` | 24 | Lower = more trades per backtest, higher = fewer/cleaner |
+| `Use_ATR_Stop` | false | If true, stop = 1.5× H1 ATR (volatility-adaptive) |
+| `Stop_Distance_Points` | 300 | Fixed point stop when `Use_ATR_Stop=false` (300 = $3 on XAU) |
+| `TP_R_Multiple` | 2.0 | Target as N × stop distance |
+| `BE_Trigger_R` | 1.0 | At what R-multiple the SL moves to BE |
+| `Partial_R` | 1.5 | At what R-multiple to take 50% off |
+| `Trail_ATR_Mult` | 0.5 | Trailing stop distance after partial |
+
+### What the tester proves (and what it doesn't)
+
+| ✅ Validates | ❌ Does NOT validate |
+|---|---|
+| BE-at-+1R correctness on real ticks | Whether the live bot picks good entries |
+| Partial close at +1.5R | Real broker spread/slippage on your prop |
+| Trailing SL after partial | WebRequest pipeline from GitHub → MT5 |
+| Lot sizing math (against historical balance) | News spike handling |
+| Direction handling (BUY and SELL) | Latency between bot signal and execution |
+| Daily trade limit, max open positions | |
+
+For end-to-end validation, use a **demo account** with the production `XAU_AutoTrader.mq5`. The tester EA is for proving the trade-management code is sane.
 
 ### Demo account workflow (closest to production)
 
