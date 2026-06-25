@@ -2,6 +2,7 @@ name: Analyst Brief Sender
 
 # Dispatched by remote routines. Combines:
 #   1. Agent's deeper analysis (Pullback view, news, judgment) — passed as `analysis` input
+#      or read from data/analyst_trigger.md when triggered by push.
 #   2. Bot's full mechanical pipeline output (live data, signal, sizing) — generated here
 # Sends both as one cohesive WhatsApp message.
 
@@ -19,6 +20,9 @@ on:
         description: "Optional label for journal/log (e.g. 'morning-routine')"
         required: false
         default: "morning-routine"
+  push:
+    branches: [main]
+    paths: ['data/analyst_trigger.md']
 
 permissions:
   contents: write
@@ -50,26 +54,38 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Load analysis and mode
+        id: setup
+        env:
+          DISPATCH_ANALYSIS: ${{ inputs.analysis }}
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "run_mode=morning" >> "$GITHUB_OUTPUT"
+            echo "run_session=morning-routine" >> "$GITHUB_OUTPUT"
+            cp data/analyst_trigger.md /tmp/analysis.txt
+          else
+            echo "run_mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
+            echo "run_session=${{ inputs.session_label }}" >> "$GITHUB_OUTPUT"
+            printf '%s' "$DISPATCH_ANALYSIS" > /tmp/analysis.txt
+          fi
+
       - name: Run bot pipeline (morning mode only)
-        if: ${{ inputs.mode == 'morning' }}
+        if: steps.setup.outputs.run_mode == 'morning'
         id: pipe
         run: |
           set -e
           python scripts/fetch_gold.py
           python scripts/compute_levels.py
-          # Read active account config
           BAL=$(python -c "import json; d=json.load(open('data/accounts.json')); a=d['accounts'][d['active']]; print(a['balance'])")
           PCT=$(python -c "import json; d=json.load(open('data/accounts.json')); a=d['accounts'][d['active']]; print(a.get('risk_pct',1.0)/100)")
           CAP=$(python -c "import json; d=json.load(open('data/accounts.json')); a=d['accounts'][d['active']]; print(a.get('max_risk_per_trade_usd',0))")
           STYLE=$(python -c "import json; d=json.load(open('data/accounts.json')); a=d['accounts'][d['active']]; print(a.get('style','swing'))")
           ACTIVE=$(python -c "import json; d=json.load(open('data/accounts.json')); print(d['active'])")
-          # Run signal engine; capture exit code (0=signal, 10=no trade)
           set +e
           SIGNAL_OUT=$(python scripts/generate_signal.py "$BAL" "$PCT" "$CAP" --style="$STYLE" 2>&1)
           CODE=$?
           set -e
           echo "signal_exit=$CODE" >> "$GITHUB_OUTPUT"
-          # Persist mechanical output for the message-build step
           {
             echo "BOT_OUT<<EOF"
             echo "$SIGNAL_OUT"
@@ -79,17 +95,15 @@ jobs:
           echo "BAL=$BAL" >> "$GITHUB_ENV"
 
       - name: Run weekly stats (weekly mode only)
-        if: ${{ inputs.mode == 'weekly' }}
+        if: steps.setup.outputs.run_mode == 'weekly'
         run: |
           python scripts/weekly_stats.py --days 7
 
       - name: Compose and send WhatsApp
-        env:
-          MODE: ${{ inputs.mode }}
-          ANALYSIS: ${{ inputs.analysis }}
-          SESSION: ${{ inputs.session_label }}
         run: |
           set -e
+          ANALYSIS=$(cat /tmp/analysis.txt)
+          MODE="${{ steps.setup.outputs.run_mode }}"
           TMPFILE=$(mktemp)
           printf '%s\n\n' "$ANALYSIS" > "$TMPFILE"
           if [ "$MODE" = "morning" ]; then
@@ -107,9 +121,9 @@ jobs:
         run: |
           git config user.name "trading-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add data/ journal/ 2>/dev/null || true
+          git add data/cache/ data/signals/ journal/ 2>/dev/null || true
           if ! git diff --cached --quiet; then
-            git commit -m "auto: ${{ inputs.session_label }} ${{ inputs.mode }} $(date -u +%Y-%m-%dT%H:%MZ)"
+            git commit -m "auto: ${{ steps.setup.outputs.run_session }} ${{ steps.setup.outputs.run_mode }} $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]"
             git push
           else
             echo "No changes to commit."
