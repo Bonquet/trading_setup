@@ -1,11 +1,11 @@
-XAU Morning Brief — 2026-06-25 UTC
-[main $769.98 • DD $4230/$200 (84.6%)]
+XAU Morning Brief — 2026-06-26 UTC
+[main $733.24 stale-2026-05-31 • equity $200 • max_loss $200/trade]
 
-PULLBACK STRATEGY (judgmental — bot can't do):
-levels.json missing — pipeline not run today; no current price, pivot, or Fib data. Journal confirms bearish D1/H4 trend (below EMA channel since April; last logged price ~4060, June 24). No Fib retracement zone can be assessed without fresh cache. Setup assessment: SKIP.
+PULLBACK STRATEGY:
+levels.json absent — pipeline not run recently; no live Fib zones available. Journal (through Jun 25): D1+H4 below 50 EMA channel for 8+ consecutive weeks. Bias: BEARISH. Last signal SELL 3979.28, SL 4016, TP1 3905 (Jun 25). Cannot confirm 38-62% retracement zone without fresh cache. Watch only — no structural reference.
 
 NEWS NEXT 24H:
-12:30 UTC — PCE Price Index (May), Final Q1 GDP, Jobless Claims, Personal Income/Spending, Durable Goods (5 high-impact releases simultaneously)
+None flagged. GDP (Q1 +2.1%) and Durable Goods released Jun 25. FOMC held 3.5-3.75% on Jun 17, hawkish lean. Jun 26 calendar clear — verify forexfactory before entry.
 
 AGENT'S TAKE:
-Skip session. Account equity ($200) equals max_loss_usd — one adverse move risks prop firm breach. Five major USD data points at 12:30 UTC will create unpredictable XAUUSD volatility through London session. No new entries. Close any open exposure before 12:30 UTC.
+Run fetch+compute before acting — levels.json missing means zero structural reference. No new entries on stale data. If pipeline confirms price bounced to 4000-4015 area (est 38-62% zone of Jun 25 leg), SHORT Pullback may be viable with fresh Fib+EMA confirmation.
