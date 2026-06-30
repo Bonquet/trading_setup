@@ -171,4 +171,10 @@ def main() -> None:
     if args.notify:
         print("\n→ Sending via notifier…")
         subprocess.run(
- 
+            [sys.executable, str(ROOT / "scripts" / NOTIFIER_NAME), summary],
+            cwd=str(ROOT),
+        )
+
+
+if __name__ == "__main__":
+    main()

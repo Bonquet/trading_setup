@@ -638,4 +638,14 @@ def main() -> None:
     elif sub == "maxrisk":
         out = cmd_maxrisk(rest[0], float(rest[1]))
     elif sub == "style":
-      
+        out = cmd_style(rest[0], rest[1])
+    else:
+        sys.exit(f"unknown subcommand: {sub}")
+
+    print(out)
+    if do_notify:
+        notify(out)
+
+
+if __name__ == "__main__":
+    main()

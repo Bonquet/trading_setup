@@ -308,4 +308,10 @@ def main() -> None:
                 cwd=str(ROOT), check=False,
             )
         except Exception as e:  # noqa: BLE001
-            print(f"(accounts.py open failed: {e}
+            print(f"(accounts.py open failed: {e} — non-fatal)")
+
+    print("Done.")
+
+
+if __name__ == "__main__":
+    main()

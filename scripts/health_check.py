@@ -356,4 +356,12 @@ def main() -> None:
         body = "\n".join(f"• {ln}" for ln in summary_lines)
         msg = f"{header}\n{ts}\n{body}"
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts
+            [sys.executable, str(ROOT / "scripts" / NOTIFIER_NAME), msg],
+            cwd=str(ROOT),
+        )
+
+    sys.exit(0 if overall_ok else 1)
+
+
+if __name__ == "__main__":
+    main()

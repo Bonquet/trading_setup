@@ -210,4 +210,9 @@ def main() -> None:
             print(f"(dispatch /{cmd} failed: {e})")
             reply(f"/{cmd} failed: {e}", env)
 
-    write_offset(last_update_i
+    write_offset(last_update_id + 1)
+    print(f"Processed {processed} command(s). New offset {last_update_id + 1}.")
+
+
+if __name__ == "__main__":
+    main()
