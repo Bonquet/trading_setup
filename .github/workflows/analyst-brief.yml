@@ -46,6 +46,9 @@ jobs:
       TWILIO_API_KEY_SECRET: ${{ secrets.TWILIO_API_KEY_SECRET }}
       TWILIO_FROM: ${{ secrets.TWILIO_FROM }}
       TWILIO_TO: ${{ secrets.TWILIO_TO }}
+      # Telegram (no 24h window)
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -111,20 +114,4 @@ jobs:
             printf '%s\n' "$BOT_OUT" >> "$TMPFILE"
           else
             printf -- '--- weekly stats ---\n' >> "$TMPFILE"
-            python -c "import json; d=json.load(open('data/cache/weekly_stats.json')); print('Total %d trades, %d W / %d L, win rate %.1f%%, total R %s' % (d.get('total_trades',0), d.get('wins',0), d.get('losses',0), d.get('win_rate_pct',0), d.get('total_r',0)))" >> "$TMPFILE"
-          fi
-          MSG=$(head -c 1500 "$TMPFILE")
-          python scripts/notify_whatsapp.py "$MSG"
-
-      - name: Commit any data/journal updates
-        if: always()
-        run: |
-          git config user.name "trading-bot"
-          git config user.email "bot@users.noreply.github.com"
-          git add data/cache/ data/signals/ journal/ 2>/dev/null || true
-          if ! git diff --cached --quiet; then
-            git commit -m "auto: ${{ steps.setup.outputs.run_session }} ${{ steps.setup.outputs.run_mode }} $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]"
-            git push
-          else
-            echo "No changes to commit."
-          fi
+            python -c "import json; d=json.load(open('data/cache/weekly_stats.json')); print('Total %d trades, %d W / %d L, win rate %.1f%%, total R %s' % (d.get('total_tra
