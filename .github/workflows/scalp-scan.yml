@@ -1,0 +1,80 @@
+name: XAUUSD Scalp Scanner
+
+# Automatically scans for VALID scalp setups (M15 style) during active hours and
+# pushes them to Telegram — same idea as the London/NY signal, but for scalps.
+#
+# QUIET_NO_TRADE=1 means it ONLY messages you when a valid scalp trade exists
+# (no "No Trade" spam every run). Telegram-only (WhatsApp disabled here) to avoid
+# the WhatsApp 24h-window problem.
+#
+# Cadence: every 15 min during the liquid London + NY sessions (07:00–20:00 UTC,
+# Mon–Fri). Dial the cron back if you hit data-feed rate limits.
+#
+# Requires repo secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
+# GOLDAPI_NET_KEY / GOLDAPI_KEY / TWELVEDATA_KEY.
+
+on:
+  schedule:
+    - cron: "*/15 7-20 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      account:
+        description: "Account size in USD"
+        required: false
+        default: "10000"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scalp-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GOLDAPI_NET_KEY: ${{ secrets.GOLDAPI_NET_KEY }}
+      QUOTE_SOURCE: auto
+      GOLDAPI_KEY: ${{ secrets.GOLDAPI_KEY }}
+      TWELVEDATA_KEY: ${{ secrets.TWELVEDATA_KEY }}
+      # Telegram only for scalps (no 24h window); WhatsApp silenced here.
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      WHATSAPP_BACKEND: disabled
+      # Force scalp style and only notify on a valid trade (no no-trade spam).
+      STYLE_OVERRIDE: scalp
+      QUIET_NO_TRADE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Resolve account size
+        id: acct
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "account=${{ inputs.account }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "account=10000" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Scan for scalp setup
+        run: python scripts/run_auto.py scalp ${{ steps.acct.outputs.account }}
+
+      - name: Commit journal + cache updates
+        if: always()
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/ journal/ 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "auto: scalp scan $(date -u +%Y-%m-%dT%H:%MZ) [skip ci]"
+            git push
+          else
+            echo "No changes to commit."
+          fi
