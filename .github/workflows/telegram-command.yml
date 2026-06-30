@@ -1,0 +1,60 @@
+name: Telegram Command Listener
+
+# Polls Telegram for commands you send the bot and runs them, replying in-chat.
+# No Twilio/webhook needed — this is the Telegram equivalent of whatsapp-command.yml.
+#
+# Cadence: GitHub's minimum cron granularity is 5 minutes, so a command you send
+# is picked up within ~5 min (sometimes longer under GitHub load). For instant
+# response you'd add a webhook relay later — polling needs zero extra infra.
+#
+# Requires repo secrets: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+# (plus the existing GOLDAPI_NET_KEY / GOLDAPI_KEY / TWELVEDATA_KEY).
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: telegram-command
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GOLDAPI_NET_KEY: ${{ secrets.GOLDAPI_NET_KEY }}
+      QUOTE_SOURCE: auto
+      GOLDAPI_KEY: ${{ secrets.GOLDAPI_KEY }}
+      TWELVEDATA_KEY: ${{ secrets.TWELVEDATA_KEY }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      # Telegram listener: replies go to Telegram; WhatsApp silenced for these runs.
+      NOTIFIER_SCRIPT: notify_telegram.py
+      WHATSAPP_BACKEND: disabled
+      ON_DEMAND: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Poll Telegram and dispatch commands
+        run: python scripts/telegram_poll.py --timeout 20
+      - name: Commit offset + journal/cache updates
+        if: always()
+        run: |
+          git config user.name "trading-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/ journal/ 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "auto: telegram poll $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push
+          else
+            echo "No changes to commit."
+          fi

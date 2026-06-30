@@ -40,7 +40,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE = ROOT / "data" / "accounts.json"
-NOTIFIER = ROOT / "scripts" / "notify_whatsapp.py"
+import os as _os
+# Reply notifier is env-configurable: the Telegram command workflow sets
+# NOTIFIER_SCRIPT=notify_telegram.py so replies go back to Telegram.
+NOTIFIER = ROOT / "scripts" / _os.environ.get("NOTIFIER_SCRIPT", "notify_whatsapp.py")
 CONTRACT_SIZE = 100.0  # oz per standard lot XAUUSD
 
 
@@ -635,14 +638,4 @@ def main() -> None:
     elif sub == "maxrisk":
         out = cmd_maxrisk(rest[0], float(rest[1]))
     elif sub == "style":
-        out = cmd_style(rest[0], rest[1])
-    else:
-        sys.exit(f"unknown subcommand: {sub}")
-
-    print(out)
-    if do_notify:
-        notify(out)
-
-
-if __name__ == "__main__":
-    main()
+      

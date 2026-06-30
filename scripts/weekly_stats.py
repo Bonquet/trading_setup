@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -25,6 +26,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 JOURNAL = ROOT / "journal" / "trades.md"
 OUT = ROOT / "data" / "cache" / "weekly_stats.json"
+# Reply notifier is env-configurable (Telegram workflow sets NOTIFIER_SCRIPT).
+NOTIFIER_NAME = os.environ.get("NOTIFIER_SCRIPT", "notify_whatsapp.py")
 
 HEADER_RE = re.compile(
     r"^###\s+(?P<date>\d{4}-\d{2}-\d{2})\s+(?P<time>\d{2}:\d{2})\s*UTC\s+—\s+(?P<dir>BUY|SELL)\s+@\s+(?P<entry>[\d.]+)",
@@ -168,10 +171,4 @@ def main() -> None:
     if args.notify:
         print("\n→ Sending via notifier…")
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "notify_whatsapp.py"), summary],
-            cwd=str(ROOT),
-        )
-
-
-if __name__ == "__main__":
-    main()
+ 

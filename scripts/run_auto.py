@@ -243,6 +243,7 @@ def main() -> None:
                 payload = json.loads(SIGNAL.read_text()) if SIGNAL.exists() else {}
                 msg = build_no_trade_message(session, levels, payload, acct_name, balance)
                 subprocess.run([py, str(SCRIPTS / "notify_whatsapp.py"), msg], cwd=str(ROOT), check=False)
+                subprocess.run([py, str(SCRIPTS / "notify_telegram.py"), msg], cwd=str(ROOT), check=False)
             except Exception as e:  # noqa: BLE001
                 print(f"(no-trade notify failed: {e})")
         print("No signal to notify. Exiting cleanly.")
@@ -282,6 +283,15 @@ def main() -> None:
     if r.returncode != 0:
         print(f"Notifier returned {r.returncode} (non-fatal).")
 
+    print(f"\n$ notify_telegram.py ...")
+    rt = subprocess.run(
+        [py, str(SCRIPTS / "notify_telegram.py"), msg],
+        cwd=str(ROOT),
+        env=env_overlay,
+    )
+    if rt.returncode != 0:
+        print(f"Telegram notifier returned {rt.returncode} (non-fatal).")
+
     append_journal(sig, session)
 
     # Record open trade against active account (if one is configured).
@@ -298,10 +308,4 @@ def main() -> None:
                 cwd=str(ROOT), check=False,
             )
         except Exception as e:  # noqa: BLE001
-            print(f"(accounts.py open failed: {e} — non-fatal)")
-
-    print("Done.")
-
-
-if __name__ == "__main__":
-    main()
+            print(f"(accounts.py open failed: {e}

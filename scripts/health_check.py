@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import urllib.error
@@ -28,6 +29,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ENV_PATH = ROOT / "config" / ".env"
+# Reply notifier is env-configurable (Telegram workflow sets NOTIFIER_SCRIPT).
+NOTIFIER_NAME = os.environ.get("NOTIFIER_SCRIPT", "notify_whatsapp.py")
 
 REQUIRED_FILES = [
     "CLAUDE.md",
@@ -328,7 +331,7 @@ def main() -> None:
     if args.send:
         print("- Sending live WhatsApp test…")
         r = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "notify_whatsapp.py"),
+            [sys.executable, str(ROOT / "scripts" / NOTIFIER_NAME),
              "XAU bot — health_check test send"],
             cwd=str(ROOT),
         )
@@ -353,12 +356,4 @@ def main() -> None:
         body = "\n".join(f"• {ln}" for ln in summary_lines)
         msg = f"{header}\n{ts}\n{body}"
         subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "notify_whatsapp.py"), msg],
-            cwd=str(ROOT),
-        )
-
-    sys.exit(0 if overall_ok else 1)
-
-
-if __name__ == "__main__":
-    main()
+            [sys.executable, str(ROOT / "scripts
