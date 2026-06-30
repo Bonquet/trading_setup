@@ -11,6 +11,11 @@ name: Telegram Command Listener
 # (plus the existing GOLDAPI_NET_KEY / GOLDAPI_KEY / TWELVEDATA_KEY).
 
 on:
+  # Instant path: the Cloudflare Worker relay fires this the moment you message
+  # the bot (see cloudflare/telegram-webhook-worker.js + WEBHOOK_SETUP.md).
+  repository_dispatch:
+    types: [telegram-command]
+  # Fallback safety net: poll every 5 min in case the webhook is ever down.
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
@@ -44,8 +49,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Poll Telegram and dispatch commands
-        run: python scripts/telegram_poll.py --timeout 20
+      - name: Dispatch command (webhook) or poll (schedule)
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "Instant webhook dispatch: ${{ github.event.client_payload.text }}"
+            python scripts/telegram_poll.py --text "${{ github.event.client_payload.text }}"
+          else
+            python scripts/telegram_poll.py --timeout 20
+          fi
       - name: Commit offset + journal/cache updates
         if: always()
         run: |

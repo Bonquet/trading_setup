@@ -173,6 +173,8 @@ def parse_command(text: str) -> tuple[str, str]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--timeout", type=int, default=20, help="long-poll seconds (0 = immediate)")
+    ap.add_argument("--text", type=str, default=None,
+                    help="webhook mode: dispatch this single command now (no polling)")
     a = ap.parse_args()
 
     env = load_env(ENV_PATH)
@@ -182,6 +184,16 @@ def main() -> None:
         sys.exit("TELEGRAM_BOT_TOKEN required in config/.env or env")
     if not auth_chat:
         sys.exit("TELEGRAM_CHAT_ID required (authorized user) in config/.env or env")
+
+    # Webhook (instant) mode: dispatch the one command passed in and exit.
+    if a.text:
+        cmd, args = parse_command(a.text)
+        if not cmd:
+            print("No command in --text; nothing to do.")
+            return
+        print(f"Webhook dispatch /{cmd} args='{args}'")
+        dispatch(cmd, args, env)
+        return
 
     offset = read_offset()
     updates = get_updates(token, offset, a.timeout)
