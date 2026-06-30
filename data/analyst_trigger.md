@@ -1,11 +1,11 @@
-XAU Morning Brief — 2026-06-26 UTC
-[main $733.24 stale-2026-05-31 • equity $200 • max_loss $200/trade]
+XAU Morning Brief — 2026-06-30 UTC
+[main $733 • DD $4267/$4800 (89%) — inferred Jun-29 journal, accts stale]
 
 PULLBACK STRATEGY:
-levels.json absent — pipeline not run recently; no live Fib zones available. Journal (through Jun 25): D1+H4 below 50 EMA channel for 8+ consecutive weeks. Bias: BEARISH. Last signal SELL 3979.28, SL 4016, TP1 3905 (Jun 25). Cannot confirm 38-62% retracement zone without fresh cache. Watch only — no structural reference.
+No levels cache. D1+H4 below 50 EMA channel — bearish intact. Bounce from Jun-25 low 3979; price approaching 38–50% retrace zone 4046–4066 of 4154→3979 leg. Setup forming; await rejection candle confirmation at zone. Do not enter without H1/M15 candle + Williams signal.
 
 NEWS NEXT 24H:
-None flagged. GDP (Q1 +2.1%) and Durable Goods released Jun 25. FOMC held 3.5-3.75% on Jun 17, hawkish lean. Jun 26 calendar clear — verify forexfactory before entry.
+None flagged — no FOMC, NFP, CPI, PPI scheduled. Next high-impact: NFP Jul-3. London clear.
 
 AGENT'S TAKE:
-Run fetch+compute before acting — levels.json missing means zero structural reference. No new entries on stale data. If pipeline confirms price bounced to 4000-4015 area (est 38-62% zone of Jun 25 leg), SHORT Pullback may be viable with fresh Fib+EMA confirmation.
+No news risk today. Equity $733 with $200 prop floor leaves $533 cushion (89% consumed). If bot fires SELL near 4046–4066 with Williams -80 cross + H4 confirmation candle, valid at 0.5% risk.
