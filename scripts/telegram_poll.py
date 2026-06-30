@@ -76,6 +76,12 @@ def get_updates(token: str, offset: int | None, timeout: int) -> list[dict]:
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
+        # 409 = a webhook is active, so polling is intentionally disabled. The
+        # webhook is the live path; treat this as "nothing to poll" and exit clean
+        # so the 5-min fallback cron doesn't spam failed runs.
+        if e.code == 409:
+            print("Webhook active — polling disabled (handled by webhook). Nothing to do.")
+            return []
         raise SystemExit(f"HTTP {e.code} from getUpdates\n{body}") from e
     if not data.get("ok"):
         raise SystemExit(f"getUpdates not ok: {data}")
