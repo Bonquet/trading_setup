@@ -1,11 +1,11 @@
-XAU Morning Brief — 2026-06-30 UTC
-[main $733 • DD $4267/$4800 (89%) — inferred Jun-29 journal, accts stale]
+XAU Morning Brief — 2026-07-01 UTC
+[main $806.83 • DD $41.91/$200 (21%)]
 
-PULLBACK STRATEGY:
-No levels cache. D1+H4 below 50 EMA channel — bearish intact. Bounce from Jun-25 low 3979; price approaching 38–50% retrace zone 4046–4066 of 4154→3979 leg. Setup forming; await rejection candle confirmation at zone. Do not enter without H1/M15 candle + Williams signal.
+PULLBACK STRATEGY (judgmental — bot can't do):
+levels.json missing — pipeline stale, no live Fib data. Journal confirms D1+H4 downtrend (LH/LL all June). SELL 3968.12 open since 06:29 UTC (1 of 2 slots). Cannot confirm fresh 38-62% retracement without live levels. Setup: Watch — skip second entry.
 
 NEWS NEXT 24H:
-None flagged — no FOMC, NFP, CPI, PPI scheduled. Next high-impact: NFP Jul-3. London clear.
+ISM Manufacturing (Jun) 14:00 UTC today; NFP (Jun) 12:30 UTC tomorrow Jul 2 — high-impact.
 
 AGENT'S TAKE:
-No news risk today. Equity $733 with $200 prop floor leaves $533 cushion (89% consumed). If bot fires SELL near 4046–4066 with Williams -80 cross + H4 confirmation candle, valid at 0.5% risk.
+NFP tomorrow 12:30 UTC is the dominant risk. Open SELL (3968.12, SL 4010.03) has a 41-pt stop — NFP volatility can overrun it. If TP1 (3884.30) not hit by 11:30 UTC tomorrow, close before NFP. Skip second position entirely. Bot London signal: do not add exposure into a pre-NFP session.
