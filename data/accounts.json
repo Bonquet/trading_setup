@@ -45,6 +45,20 @@
       "risk_pct": 1.0,
       "strategy": "50 EMA Williams (swing)",
       "opened_at": "2026-07-01T06:29Z"
+    },
+    {
+      "id": "20260701T0810Z",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 3972.2,
+      "sl": 4014.54,
+      "tp1": 3887.54,
+      "tp2": 3866.38,
+      "lots": 0.01,
+      "risk_usd": 42.33,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (swing)",
+      "opened_at": "2026-07-01T08:10Z"
     }
   ],
   "closed": [
