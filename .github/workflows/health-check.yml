@@ -19,13 +19,16 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     env:
       GOLDAPI_NET_KEY: ${{ secrets.GOLDAPI_NET_KEY }}
       QUOTE_SOURCE: auto
       GOLDAPI_KEY: ${{ secrets.GOLDAPI_KEY }}
       TWELVEDATA_KEY: ${{ secrets.TWELVEDATA_KEY }}
-      WHATSAPP_BACKEND: twilio
+      WHATSAPP_BACKEND: disabled
+      NOTIFIER_SCRIPT: notify_telegram.py
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
       TWILIO_API_KEY_SID: ${{ secrets.TWILIO_API_KEY_SID }}
       TWILIO_API_KEY_SECRET: ${{ secrets.TWILIO_API_KEY_SECRET }}

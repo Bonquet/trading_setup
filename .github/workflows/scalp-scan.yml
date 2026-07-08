@@ -33,7 +33,7 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     env:
       GOLDAPI_NET_KEY: ${{ secrets.GOLDAPI_NET_KEY }}
       QUOTE_SOURCE: auto

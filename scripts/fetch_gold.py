@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
@@ -35,6 +37,10 @@ GOLDAPI_IO_ENDPOINT = "https://www.goldapi.io/api/XAU/USD"
 PLACEHOLDER_KEYS = {"", "your_goldapi_key_here", "your_goldapi_net_key_here"}
 DEFAULT_TWELVEDATA_RETRY_SECONDS = 65
 DEFAULT_SPOT_MAX_DEVIATION_POINTS = 25.0
+DEFAULT_HTTP_MAX_ATTEMPTS = 3
+DEFAULT_HTTP_TIMEOUT_SECONDS = 15
+DEFAULT_HTTP_RETRY_BASE_SECONDS = 2.0
+TRANSIENT_HTTP_CODES = {429, 500, 502, 503, 504}
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -61,13 +67,58 @@ def load_env(path: Path) -> dict[str, str]:
 USER_AGENT = "Mozilla/5.0 (Trading-Setup/1.0)"
 
 
+def _env_int(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.environ.get(name, default)))
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return max(0.0, float(os.environ.get(name, default)))
+    except ValueError:
+        return default
+
+
+def _short_body(body: str, limit: int = 180) -> str:
+    return body[:limit].replace("\n", " ")
+
+
+def _sleep_before_retry(attempt: int, label: str) -> None:
+    base = _env_float("HTTP_RETRY_BASE_SECONDS", DEFAULT_HTTP_RETRY_BASE_SECONDS)
+    delay = base * (2 ** (attempt - 1))
+    if delay > 0:
+        print(f"{label}; retrying in {delay:.1f}s...", file=sys.stderr)
+        time.sleep(delay)
+
+
 def http_get_json(url: str, headers: dict[str, str] | None = None) -> dict:
     h = {"User-Agent": USER_AGENT, "Accept": "application/json"}
     if headers:
         h.update(headers)
     req = urllib.request.Request(url, headers=h)
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        body = resp.read().decode("utf-8", errors="replace")
+    max_attempts = _env_int("HTTP_MAX_ATTEMPTS", DEFAULT_HTTP_MAX_ATTEMPTS)
+    timeout = _env_int("HTTP_TIMEOUT_SECONDS", DEFAULT_HTTP_TIMEOUT_SECONDS)
+    body = ""
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                body = resp.read().decode("utf-8", errors="replace")
+            break
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            msg = f"HTTP {exc.code} from {url}: {_short_body(body)}"
+            if exc.code in TRANSIENT_HTTP_CODES and attempt < max_attempts:
+                _sleep_before_retry(attempt, msg)
+                continue
+            raise RuntimeError(msg) from exc
+        except (TimeoutError, socket.timeout, urllib.error.URLError, OSError) as exc:
+            msg = f"{type(exc).__name__} from {url}: {exc}"
+            if attempt < max_attempts:
+                _sleep_before_retry(attempt, msg)
+                continue
+            raise RuntimeError(msg) from exc
     try:
         data = json.loads(body)
     except json.JSONDecodeError as exc:

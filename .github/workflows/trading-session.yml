@@ -26,7 +26,7 @@ concurrency:
 jobs:
   run-session:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     env:
       # Data feeds
       GOLDAPI_NET_KEY: ${{ secrets.GOLDAPI_NET_KEY }}

@@ -44,8 +44,11 @@ REQUIRED_FILES = [
     "scripts/compute_levels.py",
     "scripts/generate_signal.py",
     "scripts/notify_whatsapp.py",
+    "scripts/notify_telegram.py",
+    "scripts/telegram_poll.py",
     "scripts/run_auto.py",
     "scripts/weekly_stats.py",
+    ".github/workflows/telegram-command.yml",
     ".github/workflows/trading-session.yml",
 ]
 REQUIRED_DIRS = [
@@ -83,6 +86,7 @@ def load_env(path: Path) -> dict[str, str]:
         "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN",
         "TWILIO_API_KEY_SID", "TWILIO_API_KEY_SECRET",
         "TWILIO_FROM", "TWILIO_TO",
+        "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID",
     ):
         if os.environ.get(k):
             env[k] = os.environ[k]
@@ -143,6 +147,10 @@ def check_env(env: dict) -> list[str]:
         if not ((env.get("TWILIO_API_KEY_SID") and env.get("TWILIO_API_KEY_SECRET"))
                 or env.get("TWILIO_AUTH_TOKEN")):
             errs.append("need TWILIO_API_KEY_SID+TWILIO_API_KEY_SECRET or TWILIO_AUTH_TOKEN")
+    if NOTIFIER_NAME == "notify_telegram.py":
+        for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
+            if not env.get(k):
+                errs.append(f"{k} missing (required for Telegram notifier)")
     return errs
 
 
@@ -250,11 +258,48 @@ def check_twilio(env: dict) -> tuple[bool, str]:
         return False, f"bad JSON: {body[:200]}"
 
 
+def _telegram_json(token: str, method: str, params: dict[str, str] | None = None) -> tuple[int, str]:
+    q = urllib.parse.urlencode(params or {})
+    suffix = f"?{q}" if q else ""
+    return http_get(f"https://api.telegram.org/bot{token}/{method}{suffix}")
+
+
+def check_telegram(env: dict) -> tuple[bool, str]:
+    token = env.get("TELEGRAM_BOT_TOKEN", "")
+    chat_id = str(env.get("TELEGRAM_CHAT_ID", "")).strip()
+    if not token or not chat_id:
+        return False, "TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID missing"
+
+    code, body = _telegram_json(token, "getMe")
+    if code != 200:
+        return False, f"getMe HTTP {code}: {body[:160]}"
+    try:
+        bot = json.loads(body)
+    except Exception:  # noqa: BLE001
+        return False, f"getMe bad JSON: {body[:160]}"
+    if not bot.get("ok"):
+        return False, f"getMe not ok: {body[:160]}"
+
+    code, body = _telegram_json(token, "getChat", {"chat_id": chat_id})
+    if code != 200:
+        return False, f"getChat HTTP {code}: {body[:160]}"
+    try:
+        chat = json.loads(body)
+    except Exception:  # noqa: BLE001
+        return False, f"getChat bad JSON: {body[:160]}"
+    if not chat.get("ok"):
+        return False, f"getChat not ok: {body[:160]}"
+
+    bot_name = bot.get("result", {}).get("username") or bot.get("result", {}).get("first_name") or "bot"
+    chat_type = chat.get("result", {}).get("type", "chat")
+    return True, f"bot=@{bot_name} chat_id={chat_id} type={chat_type}"
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--send", action="store_true", help="also send a live WhatsApp test message")
-    ap.add_argument("--notify", action="store_true", help="always send a WhatsApp summary")
-    ap.add_argument("--notify-on-fail", action="store_true", help="send WhatsApp only if something failed")
+    ap.add_argument("--send", action="store_true", help="also send a live notifier test message")
+    ap.add_argument("--notify", action="store_true", help="always send a notifier summary")
+    ap.add_argument("--notify-on-fail", action="store_true", help="send notifier summary only if something failed")
     args = ap.parse_args()
 
     print(f"Health check — {ROOT}")
@@ -327,18 +372,26 @@ def main() -> None:
         if not ok:
             fails += 1
 
-    # 6. Optional live send
+    # 6. Telegram
+    if env.get("TELEGRAM_BOT_TOKEN") or env.get("TELEGRAM_CHAT_ID") or NOTIFIER_NAME == "notify_telegram.py":
+        ok, msg = check_telegram(env)
+        print(f"{GREEN if ok else RED} Telegram auth: {msg}")
+        record(ok, "Telegram", msg[:120])
+        if not ok:
+            fails += 1
+
+    # 7. Optional live send
     if args.send:
-        print("- Sending live WhatsApp test…")
+        print(f"- Sending live notifier test via {NOTIFIER_NAME}...")
         r = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / NOTIFIER_NAME),
              "XAU bot — health_check test send"],
             cwd=str(ROOT),
         )
         if r.returncode == 0:
-            print(f"{GREEN} WhatsApp send returned 0 (check your phone)")
+            print(f"{GREEN} notifier send returned 0 (check your phone)")
         else:
-            print(f"{RED} WhatsApp send failed (exit {r.returncode})")
+            print(f"{RED} notifier send failed (exit {r.returncode})")
             fails += 1
 
     print("=" * 60)
