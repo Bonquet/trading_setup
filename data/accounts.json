@@ -59,6 +59,20 @@
       "risk_pct": 1.0,
       "strategy": "50 EMA Williams (scalp)",
       "opened_at": "2026-07-16T17:46Z"
+    },
+    {
+      "id": "20260723T1258Z",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 4065.5,
+      "sl": 4073.34,
+      "tp1": 4057.66,
+      "tp2": 4053.75,
+      "lots": 0.01,
+      "risk_usd": 7.84,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (scalp)",
+      "opened_at": "2026-07-23T12:58Z"
     }
   ],
   "closed": [
