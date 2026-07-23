@@ -2,7 +2,7 @@
   "active": "main",
   "accounts": {
     "main": {
-      "balance": 674.18,
+      "balance": 816.42,
       "initial_balance": 5000.0,
       "currency": "USD",
       "prop_firm": true,
@@ -31,50 +31,7 @@
       "risk_pct": 1.0
     }
   },
-  "open": [
-    {
-      "id": "20260716T1456Z",
-      "account": "main",
-      "direction": "SELL",
-      "entry": 3995.09,
-      "sl": 4041.25,
-      "tp1": 3902.79,
-      "tp2": 3879.72,
-      "lots": 0.01,
-      "risk_usd": 46.15,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (swing)",
-      "opened_at": "2026-07-16T14:56Z"
-    },
-    {
-      "id": "20260716T1746Z",
-      "account": "main",
-      "direction": "SELL",
-      "entry": 3981.22,
-      "sl": 3991.29,
-      "tp1": 3971.14,
-      "tp2": 3966.1,
-      "lots": 0.01,
-      "risk_usd": 10.07,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (scalp)",
-      "opened_at": "2026-07-16T17:46Z"
-    },
-    {
-      "id": "20260723T1258Z",
-      "account": "main",
-      "direction": "SELL",
-      "entry": 4065.5,
-      "sl": 4073.34,
-      "tp1": 4057.66,
-      "tp2": 4053.75,
-      "lots": 0.01,
-      "risk_usd": 7.84,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (scalp)",
-      "opened_at": "2026-07-23T12:58Z"
-    }
-  ],
+  "open": [],
   "closed": [
     {
       "id": "20260428T1232Z",
@@ -24034,6 +23991,66 @@
       "r": 1.5,
       "status": "win",
       "closed_at": "2026-07-15T13:27Z",
+      "reason": "tp"
+    },
+    {
+      "id": "20260716T1456Z",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 3995.09,
+      "sl": 4041.25,
+      "tp1": 3902.79,
+      "tp2": 3879.72,
+      "lots": 0.01,
+      "risk_usd": 46.15,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (swing)",
+      "opened_at": "2026-07-16T14:56Z",
+      "exit": 3879.72,
+      "pnl_usd": 115.37,
+      "r": 2.5,
+      "status": "win",
+      "closed_at": "2026-07-23T18:01Z",
+      "reason": "tp"
+    },
+    {
+      "id": "20260716T1746Z",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 3981.22,
+      "sl": 3991.29,
+      "tp1": 3971.14,
+      "tp2": 3966.1,
+      "lots": 0.01,
+      "risk_usd": 10.07,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (scalp)",
+      "opened_at": "2026-07-16T17:46Z",
+      "exit": 3966.1,
+      "pnl_usd": 15.12,
+      "r": 1.5,
+      "status": "win",
+      "closed_at": "2026-07-23T18:01Z",
+      "reason": "tp"
+    },
+    {
+      "id": "20260723T1258Z",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 4065.5,
+      "sl": 4073.34,
+      "tp1": 4057.66,
+      "tp2": 4053.75,
+      "lots": 0.01,
+      "risk_usd": 7.84,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (scalp)",
+      "opened_at": "2026-07-23T12:58Z",
+      "exit": 4053.75,
+      "pnl_usd": 11.75,
+      "r": 1.5,
+      "status": "win",
+      "closed_at": "2026-07-23T18:01Z",
       "reason": "tp"
     }
   ]
