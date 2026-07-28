@@ -253,13 +253,23 @@ def cmd_active(name: str) -> str:
 
 def cmd_open(account: str, direction: str, entry: float, sl: float,
              tp1: float, tp2: float, strategy: str, risk_pct: float,
-             lots: float | None = None, risk_usd: float | None = None) -> str:
+             lots: float | None = None, risk_usd: float | None = None,
+             signal_id: str = "", instrument: str = "XAUUSD") -> str:
     """Called from run_auto.py when a valid signal fires. Creates an open trade record.
     If lots and risk_usd are provided, uses them directly (preserves engine's prop-cap math).
     Otherwise computes from balance × risk_pct, also clamped by account's max_risk_per_trade_usd.
     """
     data = load()
     require_account(data, account)
+    for existing in data["open"]:
+        existing_instrument = (existing.get("instrument") or "XAUUSD").upper()
+        if signal_id and existing.get("signal_id") == signal_id:
+            return f"Already open: signal {signal_id}."
+        if existing_instrument == instrument.upper():
+            return (
+                f"REFUSED: {instrument.upper()} trade #{existing.get('id', '?')} is already open. "
+                "Close it before opening another signal."
+            )
     acc = data["accounts"][account]
     if acc.get("frozen"):
         return f"REFUSED: account {account} is frozen. /unfreeze {account} to allow trades."
@@ -280,6 +290,8 @@ def cmd_open(account: str, direction: str, entry: float, sl: float,
     trade_id = now_iso().replace(":", "").replace("-", "")
     trade = {
         "id": trade_id,
+        "signal_id": signal_id or None,
+        "instrument": instrument.upper(),
         "account": account,
         "direction": direction.upper(),
         "entry": float(entry),
@@ -485,7 +497,7 @@ def handle_whatsapp(command: str, raw_args: str, with_notify: bool = True) -> No
                 out = cmd_set(name, float(amt), currency)
         elif cmd == "active":
             if not toks:
-                out = "Usage: /active <name>"
+                out = cmd_current()
             else:
                 out = cmd_active(toks[0])
         elif cmd == "took":
@@ -610,9 +622,12 @@ def main() -> None:
             sys.exit("Usage: open <account> <dir> <entry> <sl> <tp1> <tp2> <strategy> <risk_pct> [<lots> <risk_usd>]")
         lots_arg = float(rest[8]) if len(rest) > 8 else None
         risk_usd_arg = float(rest[9]) if len(rest) > 9 else None
+        signal_id_arg = rest[10] if len(rest) > 10 else ""
+        instrument_arg = rest[11] if len(rest) > 11 else "XAUUSD"
         out = cmd_open(rest[0], rest[1], float(rest[2]), float(rest[3]),
                        float(rest[4]), float(rest[5]), rest[6], float(rest[7]),
-                       lots=lots_arg, risk_usd=risk_usd_arg)
+                       lots=lots_arg, risk_usd=risk_usd_arg,
+                       signal_id=signal_id_arg, instrument=instrument_arg)
     elif sub == "mirror":
         lots = float(rest[1]) if len(rest) > 1 else None
         out = cmd_mirror(rest[0], lots_override=lots)

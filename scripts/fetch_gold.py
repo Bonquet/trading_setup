@@ -212,10 +212,18 @@ def _is_twelvedata_rate_limit(message: str) -> bool:
     return "api credits" in msg or "current minute" in msg or "rate limit" in msg
 
 
-def fetch_candles(tf_label: str, tf_api: str, count: int, key: str) -> dict:
-    q = urllib.parse.urlencode(
-        {"symbol": SYMBOL_TD, "interval": tf_api, "outputsize": count, "apikey": key}
-    )
+def fetch_candles(
+    tf_label: str,
+    tf_api: str,
+    count: int,
+    key: str,
+    *,
+    timezone_name: str | None = None,
+) -> dict:
+    params = {"symbol": SYMBOL_TD, "interval": tf_api, "outputsize": count, "apikey": key}
+    if timezone_name:
+        params["timezone"] = timezone_name
+    q = urllib.parse.urlencode(params)
     url = f"https://api.twelvedata.com/time_series?{q}"
     retry_seconds = int(os.environ.get("TWELVEDATA_RETRY_SECONDS", DEFAULT_TWELVEDATA_RETRY_SECONDS))
     data = http_get_json(url)

@@ -5,10 +5,12 @@ on the bot, the bot can message them any time, for free, with no re-activation.
 
 Config (config/.env, overlaid by os.environ so CI secrets win):
   TELEGRAM_BOT_TOKEN   from @BotFather
-  TELEGRAM_CHAT_ID     your numeric chat id (auto-filled by --setup)
+  TELEGRAM_CHAT_ID     private command/reply chat id (auto-filled by --setup)
+  TELEGRAM_SIGNAL_CHAT_ID  group id for trade signals and result updates
 
 Usage:
   python scripts/notify_telegram.py "your message body"
+  python scripts/notify_telegram.py --signal "compact trade message"
   echo "msg" | python scripts/notify_telegram.py -
   python scripts/notify_telegram.py --setup     # detect & save chat id
 """
@@ -39,7 +41,7 @@ def load_env(path: Path) -> dict[str, str]:
             if " #" in v and not (v.startswith('"') or v.startswith("'")):
                 v = v.split(" #", 1)[0].strip()
             env[k.strip()] = v
-    for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
+    for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_SIGNAL_CHAT_ID"):
         if os.environ.get(k):
             env[k] = os.environ[k]
     return env
@@ -116,13 +118,21 @@ def main() -> None:
         setup(token)
         return
 
+    signal_destination = bool(args and args[0] == "--signal")
+    if signal_destination:
+        args = args[1:]
+
     if not args:
-        sys.exit('Usage: python scripts/notify_telegram.py "message"  |  --setup')
+        sys.exit('Usage: python scripts/notify_telegram.py [--signal] "message"  |  --setup')
     message = sys.stdin.read() if args[0] == "-" else args[0]
 
-    chat_id = env.get("TELEGRAM_CHAT_ID", "")
+    if signal_destination:
+        chat_id = env.get("TELEGRAM_SIGNAL_CHAT_ID", "") or env.get("TELEGRAM_CHAT_ID", "")
+    else:
+        chat_id = env.get("TELEGRAM_CHAT_ID", "")
     if not chat_id:
-        sys.exit("Telegram: TELEGRAM_CHAT_ID missing. Run: python scripts/notify_telegram.py --setup")
+        key = "TELEGRAM_SIGNAL_CHAT_ID/TELEGRAM_CHAT_ID" if signal_destination else "TELEGRAM_CHAT_ID"
+        sys.exit(f"Telegram: {key} missing")
 
     resp = http(token, "sendMessage", {"chat_id": chat_id, "text": message})
     if not resp.get("ok"):

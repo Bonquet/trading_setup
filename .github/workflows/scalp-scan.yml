@@ -27,7 +27,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: scalp-scan
+  group: xauusd-state
   cancel-in-progress: false
 
 jobs:
@@ -42,6 +42,7 @@ jobs:
       # Telegram only for scalps (no 24h window); WhatsApp silenced here.
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_SIGNAL_CHAT_ID: ${{ secrets.TELEGRAM_SIGNAL_CHAT_ID }}
       WHATSAPP_BACKEND: disabled
       # Force scalp style and only notify on a valid trade (no no-trade spam).
       STYLE_OVERRIDE: scalp

@@ -46,9 +46,11 @@ REQUIRED_FILES = [
     "scripts/notify_whatsapp.py",
     "scripts/notify_telegram.py",
     "scripts/telegram_poll.py",
+    "scripts/monitor_trades.py",
     "scripts/run_auto.py",
     "scripts/weekly_stats.py",
     ".github/workflows/telegram-command.yml",
+    ".github/workflows/trade-monitor.yml",
     ".github/workflows/trading-session.yml",
 ]
 REQUIRED_DIRS = [
@@ -86,7 +88,7 @@ def load_env(path: Path) -> dict[str, str]:
         "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN",
         "TWILIO_API_KEY_SID", "TWILIO_API_KEY_SECRET",
         "TWILIO_FROM", "TWILIO_TO",
-        "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID",
+        "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_SIGNAL_CHAT_ID",
     ):
         if os.environ.get(k):
             env[k] = os.environ[k]
@@ -290,9 +292,24 @@ def check_telegram(env: dict) -> tuple[bool, str]:
     if not chat.get("ok"):
         return False, f"getChat not ok: {body[:160]}"
 
+    signal_chat_id = str(env.get("TELEGRAM_SIGNAL_CHAT_ID", "")).strip()
+    signal_chat_type = ""
+    if signal_chat_id:
+        code, body = _telegram_json(token, "getChat", {"chat_id": signal_chat_id})
+        if code != 200:
+            return False, f"signal group getChat HTTP {code}: {body[:160]}"
+        try:
+            signal_chat = json.loads(body)
+        except Exception:  # noqa: BLE001
+            return False, f"signal group getChat bad JSON: {body[:160]}"
+        if not signal_chat.get("ok"):
+            return False, f"signal group getChat not ok: {body[:160]}"
+        signal_chat_type = signal_chat.get("result", {}).get("type", "chat")
+
     bot_name = bot.get("result", {}).get("username") or bot.get("result", {}).get("first_name") or "bot"
     chat_type = chat.get("result", {}).get("type", "chat")
-    return True, f"bot=@{bot_name} chat_id={chat_id} type={chat_type}"
+    group_status = f" signal_group={signal_chat_type}" if signal_chat_id else " signal_group=not configured"
+    return True, f"bot=@{bot_name} chat_id={chat_id} type={chat_type}{group_status}"
 
 
 def main() -> None:

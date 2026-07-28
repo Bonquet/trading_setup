@@ -24,7 +24,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: telegram-command
+  group: xauusd-state
   cancel-in-progress: false
 
 jobs:
@@ -38,6 +38,7 @@ jobs:
       TWELVEDATA_KEY: ${{ secrets.TWELVEDATA_KEY }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_SIGNAL_CHAT_ID: ${{ secrets.TELEGRAM_SIGNAL_CHAT_ID }}
       # Telegram listener: replies go to Telegram; WhatsApp silenced for these runs.
       NOTIFIER_SCRIPT: notify_telegram.py
       WHATSAPP_BACKEND: disabled

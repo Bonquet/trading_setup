@@ -34,6 +34,8 @@
   "open": [
     {
       "id": "20260728T1516Z",
+      "signal_id": "20260728T151615Z_d77c55c5",
+      "instrument": "XAUUSD",
       "account": "main",
       "direction": "SELL",
       "entry": 4034.47,

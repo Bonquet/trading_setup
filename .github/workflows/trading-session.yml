@@ -20,7 +20,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: trading-session
+  group: xauusd-state
   cancel-in-progress: false
 
 jobs:
@@ -44,6 +44,7 @@ jobs:
       # Telegram (no 24h window — auto-signals reach Telegram too)
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      TELEGRAM_SIGNAL_CHAT_ID: ${{ secrets.TELEGRAM_SIGNAL_CHAT_ID }}
     steps:
       - uses: actions/checkout@v4
         with:

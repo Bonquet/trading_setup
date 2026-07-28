@@ -60,7 +60,7 @@ def load_env(path: Path) -> dict[str, str]:
             if " #" in v and not (v.startswith('"') or v.startswith("'")):
                 v = v.split(" #", 1)[0].strip()
             env[k.strip()] = v
-    for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
+    for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_SIGNAL_CHAT_ID"):
         if os.environ.get(k):
             env[k] = os.environ[k]
     return env
@@ -110,6 +110,7 @@ def child_env(env: dict) -> dict:
     e["ON_DEMAND"] = "1"                          # always reply, even on No Trade
     e["TELEGRAM_BOT_TOKEN"] = env.get("TELEGRAM_BOT_TOKEN", "")
     e["TELEGRAM_CHAT_ID"] = env.get("TELEGRAM_CHAT_ID", "")
+    e["TELEGRAM_SIGNAL_CHAT_ID"] = env.get("TELEGRAM_SIGNAL_CHAT_ID", "")
     return e
 
 
@@ -145,7 +146,7 @@ def dispatch(cmd: str, args: str, env: dict) -> None:
             {"STYLE_OVERRIDE": "scalp"})
     elif cmd == "summary":
         run([py, str(SCRIPTS / "weekly_stats.py"), "--days", "7", "--notify"], env)
-    elif cmd == "current":
+    elif cmd == "current" or (cmd == "active" and not args.strip()):
         if subprocess.run([py, str(SCRIPTS / "fetch_gold.py")], cwd=str(ROOT),
                           env=child_env(env)).returncode != 0:
             reply("XAU /current failed: price refresh failed. Not using stale cache.", env)
@@ -154,7 +155,7 @@ def dispatch(cmd: str, args: str, env: dict) -> None:
                           env=child_env(env)).returncode != 0:
             reply("XAU /current failed: level computation failed.", env)
             return
-        run([py, str(SCRIPTS / "accounts.py"), "whatsapp", cmd, args], env)
+        run([py, str(SCRIPTS / "accounts.py"), "whatsapp", "current", ""], env)
     elif cmd in ACCOUNT_CMDS:
         run([py, str(SCRIPTS / "accounts.py"), "whatsapp", cmd, args], env)
     elif cmd == "start":

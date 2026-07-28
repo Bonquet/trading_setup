@@ -112,6 +112,15 @@ def build_message(sig: dict, session: str, levels: dict | None = None) -> str:
     )
 
 
+def build_telegram_signal(sig: dict) -> str:
+    """Compact public signal; explanations and account details stay private."""
+    return (
+        f"XAUUSD {sig['direction']} @ {float(sig['entry']):.2f}\n"
+        f"SL: {float(sig['stop_loss']):.2f}\n"
+        f"TP: {float(sig['tp2']):.2f}"
+    )
+
+
 def build_content_variables(sig: dict) -> str:
     """For a custom Twilio template expecting 1..6 variables."""
     return json.dumps({
@@ -163,7 +172,7 @@ def resolve_account(cli_arg: str) -> tuple[str, dict]:
     }
 
 
-def publish_signal_for_ea(sig: dict, session: str, acct_name: str) -> None:
+def publish_signal_for_ea(sig: dict, session: str, acct_name: str) -> dict:
     """Write the latest signal to a tracked path the EA can fetch from GitHub raw URL.
     Adds a stable signal_id so the EA can deduplicate.
     """
@@ -181,6 +190,29 @@ def publish_signal_for_ea(sig: dict, session: str, acct_name: str) -> None:
     # Append to history
     hist = SIGNAL_PUB_HIST_DIR / f"{sid}.json"
     hist.write_text(json.dumps(payload, indent=2, default=str))
+    return payload
+
+
+def current_xau_trade() -> dict | None:
+    state = ROOT / "data" / "accounts.json"
+    if not state.exists():
+        return None
+    try:
+        data = json.loads(state.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    for trade in data.get("open", []):
+        if (trade.get("instrument") or "XAUUSD").upper() == "XAUUSD":
+            return trade
+    return None
+
+
+def compact_active_trade(trade: dict) -> str:
+    return (
+        f"XAUUSD {trade['direction']} ACTIVE @ {float(trade['entry']):.2f}\n"
+        f"SL: {float(trade['sl']):.2f}\n"
+        f"TP: {float(trade['tp2']):.2f}"
+    )
 
 
 def build_no_trade_message(session: str, levels: dict, signal_payload: dict, acct_name: str, balance: float) -> str:
@@ -228,6 +260,19 @@ def main() -> None:
     print(f"Sizing: account='{acct_name}' bal=${balance:,.2f} risk={risk_pct_decimal*100}% "
           f"style={style} cap=${max_risk_usd or 'none'}")
 
+    active_trade = current_xau_trade()
+    if active_trade:
+        print(
+            f"Active XAUUSD trade #{active_trade.get('id', '?')} already exists; "
+            "skipping signal scan to prevent a duplicate entry."
+        )
+        if on_demand:
+            subprocess.run(
+                [py, str(SCRIPTS / "notify_telegram.py"), compact_active_trade(active_trade)],
+                cwd=str(ROOT), check=False,
+            )
+        return
+
     run([py, str(SCRIPTS / "fetch_gold.py")])
     run([py, str(SCRIPTS / "compute_levels.py")])
     # generate_signal exits 10 for No Trade; that's a clean terminal state
@@ -251,8 +296,9 @@ def main() -> None:
 
     sig = json.loads(SIGNAL.read_text())
     # Publish to tracked path for the EA to pick up via raw.githubusercontent.com
+    published = None
     try:
-        publish_signal_for_ea(sig, session, acct_name)
+        published = publish_signal_for_ea(sig, session, acct_name)
     except Exception as e:  # noqa: BLE001
         print(f"(publish_signal_for_ea failed: {e} — non-fatal)")
     levels_data = None
@@ -261,6 +307,7 @@ def main() -> None:
     except Exception:  # noqa: BLE001
         pass
     msg = build_message(sig, session, levels_data)
+    telegram_msg = build_telegram_signal(sig)
     # Prefix message with account context (incl. prop firm DD buffer if set)
     buf_str = ""
     if acct.get("max_loss_usd"):
@@ -285,7 +332,7 @@ def main() -> None:
 
     print(f"\n$ notify_telegram.py ...")
     rt = subprocess.run(
-        [py, str(SCRIPTS / "notify_telegram.py"), msg],
+        [py, str(SCRIPTS / "notify_telegram.py"), "--signal", telegram_msg],
         cwd=str(ROOT),
         env=env_overlay,
     )
@@ -304,7 +351,8 @@ def main() -> None:
                  acct_name, sig["direction"], str(sig["entry"]), str(sig["stop_loss"]),
                  str(sig["tp1"]), str(sig["tp2"]), sig["strategy"],
                  str(risk_pct_decimal * 100),
-                 str(sig.get("lots", 0.01)), str(sig.get("risk_usd", 0.0))],
+                 str(sig.get("lots", 0.01)), str(sig.get("risk_usd", 0.0)),
+                 str((published or {}).get("signal_id", "")), "XAUUSD"],
                 cwd=str(ROOT), check=False,
             )
         except Exception as e:  # noqa: BLE001
