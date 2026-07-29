@@ -7,7 +7,7 @@
 //| trail SL after partial). Reads CURRENT MT5 balance for sizing.     |
 //+------------------------------------------------------------------+
 #property copyright "trading_setup"
-#property version   "1.00"
+#property version   "1.10"
 #property strict
 
 #include <Trade/Trade.mqh>
@@ -26,7 +26,7 @@ input double  Max_Risk_USD        = 0.0;       // hard $ cap (0 = no cap)
 input double  Min_Lot             = 0.01;      // minimum lot to bother trading
 input double  Max_Lot             = 1.00;      // safety max
 input int     Max_Trades_Per_Day  = 5;
-input int     Max_Open_Positions  = 1;          // for THIS EA's magic number
+input int     Max_Open_Positions  = 2;          // independent signals for THIS EA's magic number
 
 input group "Signal Filters"
 input int     Max_Signal_Age_Sec  = 1800;       // skip if signal older than this
@@ -211,7 +211,8 @@ void ProcessSignal(string json) {
 
    double sig_entry = JsonNum(json, "entry");
    double sl        = JsonNum(json, "stop_loss");
-   double tp_final  = JsonNum(json, "tp2");
+   double tp_final  = JsonNum(json, "tp3");
+   if (tp_final <= 0) tp_final = JsonNum(json, "tp2");
    double tp1       = JsonNum(json, "tp1");
    if (sig_entry <= 0 || sl <= 0 || tp_final <= 0) {
       PrintFormat("[SKIP] invalid prices entry=%.2f sl=%.2f tp=%.2f", sig_entry, sl, tp_final);

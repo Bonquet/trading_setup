@@ -279,7 +279,7 @@ Format: one trade per block, newest at top. Claude appends after user confirms a
 ### 2026-07-28 15:16 UTC — SELL @ 4034.47
 - Session: ny
 - Strategy: 50 EMA Williams (swing)
-- SL: 4055.1 | TP1: 3993.19 | TP2: 3964.38
+- SL: 4055.1 | TP1: 4013.84 | TP2: 3993.19 | TP3: 3964.38
 - RR: 3.4R | Size: 0.01 lots | Risk: 1% of $816.42
 - Confluence: {'D1_position': 'below_channel', 'H4_position': 'below_channel', 'williams_r14': -80.8, 'stoch_k': 22.0, 'stoch_d': 27.4}
 - Outcome: pending

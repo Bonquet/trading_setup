@@ -15,8 +15,9 @@ SELL valid iff (mirror):
   - stoch_k < stoch_d AND stoch_k < 40
 
 Stop loss:  below last H4 swing low (buy) / above last H4 swing high (sell).
-Take profit: 2R, clamped toward the nearest daily pivot (R1/R2 long, S1/S2 short).
-Requires the pivot target to be >= 2R away, else "No Trade — no room".
+Take profit: staged at 1R and 2R, with the final target at 2.5R or a valid
+daily pivot extension (R1/R2 long, S1/S2 short).
+Requires the final target to be >= 2R away, else "No Trade — no room".
 
 Writes data/cache/signal.json and prints a one-line summary.
 
@@ -57,6 +58,41 @@ def no_trade(reason: str, data: dict) -> None:
     OUT.write_text(json.dumps(payload, indent=2, default=str))
     print(f"No Trade — {reason}")
     sys.exit(10)
+
+
+def build_targets(
+    direction: str,
+    entry: float,
+    risk: float,
+    target_method: str,
+    pivots: dict,
+) -> tuple[float, float, float | None, float, float | None]:
+    """Return TP1, TP2, optional TP3, final TP, and the selected pivot."""
+    sign = 1.0 if direction == "BUY" else -1.0
+    tp1 = entry + sign * risk
+
+    if target_method == "fixed_15r":
+        tp2 = entry + sign * 1.5 * risk
+        return tp1, tp2, None, tp2, None
+
+    tp2 = entry + sign * 2.0 * risk
+    tp_25r = entry + sign * 2.5 * risk
+    tp_4r = entry + sign * 4.0 * risk
+    pivot_target = None
+    pivot_names = ("R2", "R1") if direction == "BUY" else ("S2", "S1")
+    for level in pivot_names:
+        value = pivots.get(level)
+        if not value:
+            continue
+        if direction == "BUY" and tp_25r <= value <= tp_4r:
+            pivot_target = value
+            break
+        if direction == "SELL" and tp_4r <= value <= tp_25r:
+            pivot_target = value
+            break
+
+    tp3 = pivot_target if pivot_target else tp_25r
+    return tp1, tp2, tp3, tp3, pivot_target
 
 
 def main() -> None:
@@ -164,22 +200,6 @@ def main() -> None:
         if risk <= 0:
             no_trade("invalid SL distance", data)
 
-        if target_method == "fixed_15r":
-            tp_final = entry + 1.5 * risk
-            tp1 = entry + 1.0 * risk
-            pivot_target = None
-        else:
-            tp_2r = entry + 2 * risk
-            tp_25r = entry + 2.5 * risk
-            tp_max = entry + 4 * risk
-            pivot_target = None
-            for lvl in ("R2", "R1"):
-                v = pivots.get(lvl)
-                if v and tp_25r <= v <= tp_max:
-                    pivot_target = v
-                    break
-            tp_final = pivot_target if pivot_target else tp_25r
-            tp1 = tp_2r
     else:  # SELL
         if stop_method == "atr":
             risk = primary_atr * stop_atr_mult
@@ -192,22 +212,10 @@ def main() -> None:
         if risk <= 0:
             no_trade("invalid SL distance", data)
 
-        if target_method == "fixed_15r":
-            tp_final = entry - 1.5 * risk
-            tp1 = entry - 1.0 * risk
-            pivot_target = None
-        else:
-            tp_2r = entry - 2 * risk
-            tp_25r = entry - 2.5 * risk
-            tp_max = entry - 4 * risk
-            pivot_target = None
-            for lvl in ("S2", "S1"):
-                v = pivots.get(lvl)
-                if v and tp_max <= v <= tp_25r:
-                    pivot_target = v
-                    break
-            tp_final = pivot_target if pivot_target else tp_25r
-            tp1 = tp_2r
+
+    tp1, tp2, tp3, tp_final, pivot_target = build_targets(
+        direction, entry, risk, target_method, pivots
+    )
 
     rr = abs(tp_final - entry) / risk
     min_rr = 1.5 if target_method == "fixed_15r" else 2.0
@@ -241,9 +249,14 @@ def main() -> None:
         "entry": round(entry, 2),
         "stop_loss": round(sl, 2),
         "tp1": round(tp1, 2),
-        "tp2": round(tp_final, 2),
+        "tp2": round(tp2, 2),
+        "tp3": round(tp3, 2) if tp3 is not None else None,
+        "final_tp": round(tp_final, 2),
         "risk_per_unit": round(risk, 2),
-        "rr_to_tp2": round(rr, 2),
+        "rr_to_tp1": 1.0,
+        "rr_to_tp2": 1.5 if target_method == "fixed_15r" else 2.0,
+        "rr_to_tp3": round(rr, 2) if tp3 is not None else None,
+        "rr_to_final": round(rr, 2),
         "account": account,
         "risk_pct": risk_pct,
         "risk_usd": round(risk_usd, 2),
@@ -261,12 +274,19 @@ def main() -> None:
             "stoch_d": round(d, 1),
         },
         "pivot_target_used": bool(pivot_target),
+        "setup_candle_time": tf.get("last_candle_time"),
+        "setup_key": (
+            f"XAUUSD:{style}:{direction}:"
+            f"{tf.get('last_candle_time') or data.get('fetched_at_utc') or 'unknown'}"
+        ),
         "fetched_at_utc": data.get("fetched_at_utc"),
     }
     OUT.write_text(json.dumps(sig, indent=2, default=str))
+    tp3_text = f" | TP3 {sig['tp3']}" if sig.get("tp3") else ""
     print(
         f"{direction} XAU @ {sig['entry']} | SL {sig['stop_loss']} | "
-        f"TP {sig['tp2']} | RR {sig['rr_to_tp2']}R | {sig['lots']} lots"
+        f"TP1 {sig['tp1']} | TP2 {sig['tp2']}{tp3_text} | "
+        f"RR {sig['rr_to_final']}R | {sig['lots']} lots"
     )
 
 

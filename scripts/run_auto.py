@@ -24,6 +24,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import accounts
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SIGNAL = ROOT / "data" / "cache" / "signal.json"
@@ -40,6 +42,21 @@ def run(cmd: list[str], *, allow_codes: tuple[int, ...] = (0,)) -> int:
     if r.returncode not in allow_codes:
         sys.exit(r.returncode)
     return r.returncode
+
+
+def final_target(signal: dict) -> float:
+    return float(signal.get("tp3") or signal.get("final_tp") or signal["tp2"])
+
+
+def signal_targets(signal: dict) -> list[tuple[str, float]]:
+    targets = [("TP1", float(signal["tp1"])), ("TP2", float(signal["tp2"]))]
+    if signal.get("tp3") is not None:
+        targets.append(("TP3", float(signal["tp3"])))
+    return targets
+
+
+def target_text(signal: dict, separator: str = " | ") -> str:
+    return separator.join(f"{name}: {price:.2f}" for name, price in signal_targets(signal))
 
 
 def build_message(sig: dict, session: str, levels: dict | None = None) -> str:
@@ -60,7 +77,13 @@ def build_message(sig: dict, session: str, levels: dict | None = None) -> str:
     bias = "uptrend" if direction == "BUY" else "downtrend"
     side_word = "above" if direction == "BUY" else "below"
     pivot_target = "R1/R2" if direction == "BUY" else "S1/S2"
-    pivot_used = "pivot target" if sig.get("pivot_target_used") else "fixed 2R"
+    if sig.get("pivot_target_used"):
+        pivot_used = "pivot target"
+    elif style_name == "scalp":
+        pivot_used = "fixed 1.5R"
+    else:
+        pivot_used = "fixed 2.5R"
+    rr_gate = "1.5R" if style_name == "scalp" else "2R"
 
     # Pull live tf data if levels provided (for richer reasoning)
     stop_atr_str = primary_atr_str = swing = ""
@@ -78,6 +101,7 @@ def build_message(sig: dict, session: str, levels: dict | None = None) -> str:
     cap_exceeded = sig.get("cap_exceeded", False)
     cap_pct = sig.get("cap_exceeded_pct", 0)
     cap_usd = sig.get("max_risk_cap_usd", 0)
+    rr_final = sig.get("rr_to_final", sig.get("rr_to_tp3", sig.get("rr_to_tp2")))
     if cap_exceeded:
         cap_str = f" — ⚠️ EXCEEDS cap ${cap_usd:.0f} ({cap_pct:.0f}% of cap)"
         warning_line = (f"\n⚠️ WARNING: 0.01 lot at this stop distance risks ${sig.get('risk_usd','?')}, "
@@ -89,8 +113,8 @@ def build_message(sig: dict, session: str, levels: dict | None = None) -> str:
 
     return (
         f"XAU {direction} @ {sig['entry']}  [{style_name}]\n"
-        f"SL {sig['stop_loss']} | TP {sig['tp2']}\n"
-        f"RR {sig['rr_to_tp2']}R | {sig['lots']} lots | risk ${sig.get('risk_usd','?')}{cap_str}\n"
+        f"SL {sig['stop_loss']} | {target_text(sig)}\n"
+        f"RR {rr_final}R | {sig['lots']} lots | risk ${sig.get('risk_usd','?')}{cap_str}\n"
         f"Strategy: {sig['strategy']} ({session}){warning_line}\n"
         f"\n"
         f"WHY THIS TRADE:\n"
@@ -103,8 +127,8 @@ def build_message(sig: dict, session: str, levels: dict | None = None) -> str:
         f"• Stop placed {('below' if direction=='BUY' else 'above')} the {stop_tf} last swing "
         f"{('low' if direction=='BUY' else 'high')} with an ATR buffer "
         f"({sig.get('stop_distance','?')} pts){swing}{stop_atr_str}{primary_atr_str}.\n"
-        f"• Target: {pivot_used} toward {pivot_target} — RR {sig['rr_to_tp2']}R guaranteed "
-        f"by the engine's ≥2R gate.\n"
+        f"• Target: {pivot_used} toward {pivot_target} — RR {rr_final}R guaranteed "
+        f"by the engine's ≥{rr_gate} gate.\n"
         f"\n"
         f"INVALIDATION: stop hit, OR {bias_tf}/{primary} close back inside their 50 EMA channel.\n"
         f"\n"
@@ -117,7 +141,7 @@ def build_telegram_signal(sig: dict) -> str:
     return (
         f"XAUUSD {sig['direction']} @ {float(sig['entry']):.2f}\n"
         f"SL: {float(sig['stop_loss']):.2f}\n"
-        f"TP: {float(sig['tp2']):.2f}"
+        f"{target_text(sig, separator=chr(10))}"
     )
 
 
@@ -127,8 +151,8 @@ def build_content_variables(sig: dict) -> str:
         "1": sig["direction"],
         "2": str(sig["entry"]),
         "3": str(sig["stop_loss"]),
-        "4": str(sig["tp2"]),
-        "5": str(sig["rr_to_tp2"]),
+        "4": str(final_target(sig)),
+        "5": str(sig.get("rr_to_final", sig.get("rr_to_tp2"))),
         "6": sig["strategy"],
     })
 
@@ -142,8 +166,9 @@ def append_journal(sig: dict, session: str) -> None:
         f"\n### {ts} — {sig['direction']} @ {sig['entry']}\n"
         f"- Session: {session}\n"
         f"- Strategy: {sig['strategy']}\n"
-        f"- SL: {sig['stop_loss']} | TP1: {sig['tp1']} | TP2: {sig['tp2']}\n"
-        f"- RR: {sig['rr_to_tp2']}R | Size: {sig['lots']} lots | Risk: 1% of ${sig['account']}\n"
+        f"- SL: {sig['stop_loss']} | {target_text(sig)}\n"
+        f"- RR: {sig.get('rr_to_final', sig.get('rr_to_tp2'))}R | "
+        f"Size: {sig['lots']} lots | Risk: 1% of ${sig['account']}\n"
         f"- Confluence: {sig['confluence']}\n"
         f"- Outcome: pending\n"
     )
@@ -172,16 +197,25 @@ def resolve_account(cli_arg: str) -> tuple[str, dict]:
     }
 
 
-def publish_signal_for_ea(sig: dict, session: str, acct_name: str) -> dict:
+def new_signal_id() -> str:
+    import uuid
+    return f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:8]}"
+
+
+def publish_signal_for_ea(
+    sig: dict,
+    session: str,
+    acct_name: str,
+    signal_id: str | None = None,
+) -> dict:
     """Write the latest signal to a tracked path the EA can fetch from GitHub raw URL.
     Adds a stable signal_id so the EA can deduplicate.
     """
-    import uuid
     SIGNAL_PUB.parent.mkdir(parents=True, exist_ok=True)
     SIGNAL_PUB_HIST_DIR.mkdir(parents=True, exist_ok=True)
     payload = dict(sig)
     # signal_id = ISO timestamp + uuid so it's unique even on rapid re-runs
-    sid = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{uuid.uuid4().hex[:8]}"
+    sid = signal_id or new_signal_id()
     payload["signal_id"] = sid
     payload["published_at_utc"] = datetime.now(timezone.utc).isoformat()
     payload["session"] = session
@@ -193,26 +227,31 @@ def publish_signal_for_ea(sig: dict, session: str, acct_name: str) -> dict:
     return payload
 
 
-def current_xau_trade() -> dict | None:
+def current_xau_trades(account_name: str | None = None) -> list[dict]:
     state = ROOT / "data" / "accounts.json"
     if not state.exists():
-        return None
+        return []
     try:
         data = json.loads(state.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return None
-    for trade in data.get("open", []):
-        if (trade.get("instrument") or "XAUUSD").upper() == "XAUUSD":
-            return trade
-    return None
+        return []
+    return [
+        trade for trade in data.get("open", [])
+        if (trade.get("instrument") or "XAUUSD").upper() == "XAUUSD"
+        and (account_name is None or trade.get("account") == account_name)
+    ]
 
 
 def compact_active_trade(trade: dict) -> str:
     return (
         f"XAUUSD {trade['direction']} ACTIVE @ {float(trade['entry']):.2f}\n"
         f"SL: {float(trade['sl']):.2f}\n"
-        f"TP: {float(trade['tp2']):.2f}"
+        f"{target_text(trade, separator=chr(10))}"
     )
+
+
+def compact_active_trades(trades: list[dict]) -> str:
+    return "\n\n".join(compact_active_trade(trade) for trade in trades)
 
 
 def build_no_trade_message(session: str, levels: dict, signal_payload: dict, acct_name: str, balance: float) -> str:
@@ -260,18 +299,23 @@ def main() -> None:
     print(f"Sizing: account='{acct_name}' bal=${balance:,.2f} risk={risk_pct_decimal*100}% "
           f"style={style} cap=${max_risk_usd or 'none'}")
 
-    active_trade = current_xau_trade()
-    if active_trade:
+    max_concurrent = int(acct.get("max_concurrent_trades", accounts.DEFAULT_MAX_CONCURRENT_TRADES))
+    active_trades = current_xau_trades(acct_name)
+    if len(active_trades) >= max_concurrent:
         print(
-            f"Active XAUUSD trade #{active_trade.get('id', '?')} already exists; "
-            "skipping signal scan to prevent a duplicate entry."
+            f"Active XAUUSD trade limit reached ({len(active_trades)}/{max_concurrent}); "
+            "skipping signal scan."
         )
         if on_demand:
             subprocess.run(
-                [py, str(SCRIPTS / "notify_telegram.py"), compact_active_trade(active_trade)],
+                [py, str(SCRIPTS / "notify_telegram.py"), compact_active_trades(active_trades)],
                 cwd=str(ROOT), check=False,
             )
         return
+    if active_trades:
+        print(
+            f"Continuing scan with {len(active_trades)}/{max_concurrent} active XAUUSD trade(s)."
+        )
 
     run([py, str(SCRIPTS / "fetch_gold.py")])
     run([py, str(SCRIPTS / "compute_levels.py")])
@@ -295,10 +339,42 @@ def main() -> None:
         return
 
     sig = json.loads(SIGNAL.read_text())
-    # Publish to tracked path for the EA to pick up via raw.githubusercontent.com
+    active_trades = current_xau_trades(acct_name)
+    setup_key = str(sig.get("setup_key") or "")
+    if setup_key and any(trade.get("setup_key") == setup_key for trade in active_trades):
+        print(f"Setup {setup_key} is already open; skipping duplicate publication.")
+        return
+    if len(active_trades) >= max_concurrent:
+        print(f"Trade limit reached during scan ({len(active_trades)}/{max_concurrent}); skipping publication.")
+        return
+
+    signal_id = new_signal_id()
+    if acct_name != "default":
+        opened = accounts.cmd_open(
+            acct_name,
+            sig["direction"],
+            float(sig["entry"]),
+            float(sig["stop_loss"]),
+            float(sig["tp1"]),
+            float(sig["tp2"]),
+            sig["strategy"],
+            risk_pct_decimal * 100,
+            lots=float(sig.get("lots", 0.01)),
+            risk_usd=float(sig.get("risk_usd", 0.0)),
+            signal_id=signal_id,
+            instrument="XAUUSD",
+            tp3=float(sig["tp3"]) if sig.get("tp3") is not None else None,
+            setup_key=setup_key,
+        )
+        print(opened)
+        if not opened.startswith("Opened #"):
+            print("Signal was not published because its trade record was refused.")
+            return
+
+    # Publish to tracked path for the EA to pick up via raw.githubusercontent.com.
     published = None
     try:
-        published = publish_signal_for_ea(sig, session, acct_name)
+        published = publish_signal_for_ea(sig, session, acct_name, signal_id=signal_id)
     except Exception as e:  # noqa: BLE001
         print(f"(publish_signal_for_ea failed: {e} — non-fatal)")
     levels_data = None
@@ -340,23 +416,6 @@ def main() -> None:
         print(f"Telegram notifier returned {rt.returncode} (non-fatal).")
 
     append_journal(sig, session)
-
-    # Record open trade against active account (if one is configured).
-    # Pass the engine's exact lots+risk_usd so the persisted record matches
-    # the message (prop $-cap respected end-to-end).
-    if acct_name != "default":
-        try:
-            subprocess.run(
-                [py, str(SCRIPTS / "accounts.py"), "open",
-                 acct_name, sig["direction"], str(sig["entry"]), str(sig["stop_loss"]),
-                 str(sig["tp1"]), str(sig["tp2"]), sig["strategy"],
-                 str(risk_pct_decimal * 100),
-                 str(sig.get("lots", 0.01)), str(sig.get("risk_usd", 0.0)),
-                 str((published or {}).get("signal_id", "")), "XAUUSD"],
-                cwd=str(ROOT), check=False,
-            )
-        except Exception as e:  # noqa: BLE001
-            print(f"(accounts.py open failed: {e} — non-fatal)")
 
     print("Done.")
 

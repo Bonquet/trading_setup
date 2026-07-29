@@ -1,13 +1,13 @@
 # XAU AutoTrader EA — Install & Configure
 
-Auto-executes signals from your bot directly inside MT5. Polls the public repo for fresh signals, opens market orders with the correct lot size for your current balance, then manages the trade (BE at +1R, partial close at +1.5R, trail to TP2).
+Auto-executes signals from your bot directly inside MT5. Polls the public repo for fresh signals, opens market orders with the correct lot size for your current balance, then manages the trade (BE at +1R, partial close at +1.5R, trail to the final TP).
 
 ## What it does
 
 1. **Polls** `https://raw.githubusercontent.com/Bonquet/trading_setup/main/data/signals/latest.json` every 30s
 2. **Validates** the signal: fresh (< 30 min), valid trade, allowed style, deduplicated
 3. **Sizes** the lot using your CURRENT MT5 balance × Risk_Percent — not the signal's pre-computed lot
-4. **Opens** a market order with the signal's SL and TP2
+4. **Opens** a market order with the signal's SL and final TP (TP3 when present, otherwise TP2)
 5. **Manages** the position:
    - At **+1R unrealized**: SL moves to break-even (+2 points buffer)
    - At **+1.5R unrealized**: closes 50% of position (locks profit)
@@ -91,7 +91,7 @@ When you attach the EA, set these inputs:
 | `Min_Lot` | 0.01 | Don't trade if calculated lot is below |
 | `Max_Lot` | 1.00 | Safety cap |
 | `Max_Trades_Per_Day` | 5 | Resets at 00:00 UTC |
-| `Max_Open_Positions` | 1 | For THIS magic number; doesn't block manual trades |
+| `Max_Open_Positions` | 2 | Independent signals for THIS magic number; doesn't block manual trades |
 
 ### Signal Filters
 | Input | Default | Notes |
@@ -142,7 +142,7 @@ End-to-end latency from cron to fill: ~1–2 minutes (GitHub Actions ~30s + comm
 
 - **Magic number isolation** — only manages positions opened by this EA. Your manual trades are untouched.
 - **Duplicate prevention** — tracks last_signal_id in `MQL5/Files/xau_autotrader_state.txt`. Same signal won't be taken twice even after MT5 restart.
-- **Max open positions** — won't pile on. Default 1 = one EA position at a time.
+- **Max open positions** — won't pile on beyond the configured limit. Default 2 matches the playbook.
 - **Max trades per day** — default 5. After hitting limit, polling continues (state checks) but no new orders.
 - **Stop-loss is set on every order** — never an "exposed" position. If your broker rejects SL/TP at order time, the trade is logged as failed.
 - **Lot size capped** — Min_Lot and Max_Lot inputs are hard limits.

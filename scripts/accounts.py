@@ -9,7 +9,7 @@ Structure:
     "main":    {"balance": 5000.0, "currency": "USD"},
     "savings": {"balance": 10000.0, "currency": "USD"}
   },
-  "open":   [ {id, account, direction, entry, sl, tp1, tp2, lots, risk_usd, strategy, opened_at} ],
+  "open":   [ {id, account, direction, entry, sl, tp1, tp2, tp3, lots, risk_usd, strategy, opened_at} ],
   "closed": [ {..., exit, pnl_usd, r, status, closed_at} ]
 }
 
@@ -22,7 +22,7 @@ CLI (called from workflow / locally):
   python scripts/accounts.py list
   python scripts/accounts.py set <name> <balance> [currency]   # create or update
   python scripts/accounts.py active <name>
-  python scripts/accounts.py open <account> <dir> <entry> <sl> <tp1> <tp2> <strategy> <risk_pct>
+  python scripts/accounts.py open <account> <dir> <entry> <sl> <tp1> <tp2> <strategy> <risk_pct> [... <tp3>]
   python scripts/accounts.py mirror <account>                   # copy latest open onto another account
   python scripts/accounts.py close <result> [price]             # result = win|loss|be|price ; price optional when result=price
   python scripts/accounts.py pnl
@@ -35,6 +35,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -45,6 +46,7 @@ import os as _os
 # NOTIFIER_SCRIPT=notify_telegram.py so replies go back to Telegram.
 NOTIFIER = ROOT / "scripts" / _os.environ.get("NOTIFIER_SCRIPT", "notify_whatsapp.py")
 CONTRACT_SIZE = 100.0  # oz per standard lot XAUUSD
+DEFAULT_MAX_CONCURRENT_TRADES = 2
 
 
 # ---------- state I/O ----------
@@ -87,6 +89,27 @@ def pnl_of(direction: str, entry: float, exit_price: float, lots: float) -> floa
     if direction.upper() == "BUY":
         return round((exit_price - entry) * CONTRACT_SIZE * lots, 2)
     return round((entry - exit_price) * CONTRACT_SIZE * lots, 2)
+
+
+def final_tp(trade: dict) -> float:
+    """Return the final target while remaining compatible with legacy trades."""
+    return float(trade.get("tp3") or trade.get("final_tp") or trade["tp2"])
+
+
+def target_levels(trade: dict) -> list[tuple[str, float]]:
+    levels = [("TP1", float(trade["tp1"])), ("TP2", float(trade["tp2"]))]
+    if trade.get("tp3") is not None:
+        levels.append(("TP3", float(trade["tp3"])))
+    return levels
+
+
+def format_targets(trade: dict, separator: str = " | ") -> str:
+    return separator.join(f"{name} {price:.2f}" for name, price in target_levels(trade))
+
+
+def new_trade_id() -> str:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"{stamp}_{uuid.uuid4().hex[:6]}"
 
 
 def require_account(data: dict, name: str) -> None:
@@ -141,7 +164,10 @@ def cmd_list() -> str:
         lines.append("")
         lines.append(f"Open positions: {opens}")
         for t in data["open"]:
-            lines.append(f"  - #{t['id']} {t['account']} {t['direction']} @ {t['entry']} SL {t['sl']} TP {t['tp2']} ({t.get('lots','?')} lots)")
+            lines.append(
+                f"  - #{t['id']} {t['account']} {t['direction']} @ {t['entry']} "
+                f"SL {t['sl']} {format_targets(t)} ({t.get('lots','?')} lots)"
+            )
     return "\n".join(lines)
 
 
@@ -254,23 +280,34 @@ def cmd_active(name: str) -> str:
 def cmd_open(account: str, direction: str, entry: float, sl: float,
              tp1: float, tp2: float, strategy: str, risk_pct: float,
              lots: float | None = None, risk_usd: float | None = None,
-             signal_id: str = "", instrument: str = "XAUUSD") -> str:
+             signal_id: str = "", instrument: str = "XAUUSD",
+             tp3: float | None = None, setup_key: str = "") -> str:
     """Called from run_auto.py when a valid signal fires. Creates an open trade record.
     If lots and risk_usd are provided, uses them directly (preserves engine's prop-cap math).
     Otherwise computes from balance × risk_pct, also clamped by account's max_risk_per_trade_usd.
     """
     data = load()
     require_account(data, account)
-    for existing in data["open"]:
-        existing_instrument = (existing.get("instrument") or "XAUUSD").upper()
-        if signal_id and existing.get("signal_id") == signal_id:
-            return f"Already open: signal {signal_id}."
-        if existing_instrument == instrument.upper():
-            return (
-                f"REFUSED: {instrument.upper()} trade #{existing.get('id', '?')} is already open. "
-                "Close it before opening another signal."
-            )
     acc = data["accounts"][account]
+    instrument = instrument.upper()
+    for existing in list(data["open"]) + list(data["closed"]):
+        if signal_id and existing.get("signal_id") == signal_id:
+            return f"Already recorded: signal {signal_id}."
+        if setup_key and existing.get("setup_key") == setup_key:
+            return f"Already recorded: setup {setup_key}."
+
+    matching = [
+        trade for trade in data["open"]
+        if trade.get("account") == account
+        and (trade.get("instrument") or "XAUUSD").upper() == instrument
+    ]
+    max_concurrent = int(acc.get("max_concurrent_trades", DEFAULT_MAX_CONCURRENT_TRADES))
+    if len(matching) >= max_concurrent:
+        ids = ", ".join(f"#{trade.get('id', '?')}" for trade in matching)
+        return (
+            f"REFUSED: {account} already has {len(matching)}/{max_concurrent} "
+            f"open {instrument} trades ({ids})."
+        )
     if acc.get("frozen"):
         return f"REFUSED: account {account} is frozen. /unfreeze {account} to allow trades."
     bal = acc["balance"]
@@ -287,17 +324,21 @@ def cmd_open(account: str, direction: str, entry: float, sl: float,
         budget = min(risk_pct_usd, cap) if cap > 0 else risk_pct_usd
         lots = max(0.01, round(budget / (stop_dist * CONTRACT_SIZE), 2))
         risk_usd = round(lots * stop_dist * CONTRACT_SIZE, 2)
-    trade_id = now_iso().replace(":", "").replace("-", "")
+    trade_id = new_trade_id()
     trade = {
         "id": trade_id,
         "signal_id": signal_id or None,
-        "instrument": instrument.upper(),
+        "setup_key": setup_key or None,
+        "instrument": instrument,
         "account": account,
         "direction": direction.upper(),
         "entry": float(entry),
         "sl": float(sl),
         "tp1": float(tp1),
         "tp2": float(tp2),
+        "tp3": float(tp3) if tp3 is not None else None,
+        "final_tp": float(tp3) if tp3 is not None else float(tp2),
+        "target_hits": {},
         "lots": lots,
         "risk_usd": risk_usd,
         "risk_pct": risk_pct,
@@ -307,7 +348,7 @@ def cmd_open(account: str, direction: str, entry: float, sl: float,
     data["open"].append(trade)
     save(data)
     return (f"Opened #{trade_id} on {account}: {direction.upper()} @ {entry} "
-            f"SL {sl} TP {tp2} — {lots} lots, risk ${risk_usd:,.2f} ({risk_pct}%)")
+            f"SL {sl} {format_targets(trade)} — {lots} lots, risk ${risk_usd:,.2f} ({risk_pct}%)")
 
 
 def cmd_mirror(dest_account: str, lots_override: float | None = None) -> str:
@@ -344,7 +385,7 @@ def cmd_mirror(dest_account: str, lots_override: float | None = None) -> str:
         lots = max(0.01, _m.floor(budget / (stop_dist * CONTRACT_SIZE) * 100) / 100)
         risk_usd = round(lots * stop_dist * CONTRACT_SIZE, 2)
         custom_note = ""
-    trade_id = now_iso().replace(":", "").replace("-", "") + "_m"
+    trade_id = new_trade_id() + "_m"
     mirror = dict(src)
     mirror.update({
         "id": trade_id,
@@ -353,6 +394,7 @@ def cmd_mirror(dest_account: str, lots_override: float | None = None) -> str:
         "risk_usd": risk_usd,
         "opened_at": now_iso(),
         "mirrored_from": src["id"],
+        "target_hits": {},
     })
     data["open"].append(mirror)
     save(data)
@@ -360,21 +402,46 @@ def cmd_mirror(dest_account: str, lots_override: float | None = None) -> str:
             f"{src['direction']} @ {src['entry']} — {lots} lots, risk ${risk_usd:,.2f}")
 
 
-def cmd_close(result: str, price: float | None = None, reason: str = "") -> str:
-    """Close ALL currently-open trades with a shared outcome + optional reason.
+def cmd_close(
+    result: str,
+    price: float | None = None,
+    reason: str = "",
+    trade_id: str | None = None,
+) -> str:
+    """Close one currently-open trade with an outcome and optional reason.
+
+    When several trades are open, trade_id is required so one command cannot
+    accidentally close unrelated setups.
+
     result: win | loss | be | price
     price:  only required when result == 'price'
-    reason: free text — recorded with each closed trade
+    reason: free text - recorded with the closed trade
     """
     data = load()
     if not data["open"]:
         return "No open trades to close."
 
+    if trade_id:
+        candidates = [
+            trade for trade in data["open"]
+            if str(trade.get("id", "")) == trade_id
+            or str(trade.get("id", "")).startswith(trade_id)
+        ]
+        if not candidates:
+            return f"No open trade matches #{trade_id}."
+        if len(candidates) > 1:
+            return f"Trade ID prefix #{trade_id} is ambiguous. Use more of the ID."
+    elif len(data["open"]) > 1:
+        ids = ", ".join(f"#{trade.get('id', '?')}" for trade in data["open"])
+        return f"Multiple trades are open ({ids}). Use /close <trade-id> win|loss|be."
+    else:
+        candidates = [data["open"][0]]
+
     lines = ["Closed:"]
     total_pnl_by: dict[str, float] = {}
-    for trade in list(data["open"]):
+    for trade in candidates:
         if result == "win":
-            exit_p = trade["tp2"]
+            exit_p = final_tp(trade)
             status = "win"
         elif result == "loss":
             exit_p = trade["sl"]
@@ -443,7 +510,7 @@ def cmd_current() -> str:
     lines.append("")
     for t in data["open"]:
         line = (f"#{t['id']} [{t['account']}] {t['direction']} @ {t['entry']}\n"
-                f"  SL {t['sl']} | TP {t['tp2']} | {t['lots']} lots | risk ${t['risk_usd']:,.2f}")
+                f"  SL {t['sl']} | {format_targets(t)} | {t['lots']} lots | risk ${t['risk_usd']:,.2f}")
         if spot:
             running = pnl_of(t["direction"], t["entry"], spot, t["lots"])
             r = round(running / t["risk_usd"], 2) if t["risk_usd"] else 0.0
@@ -515,23 +582,33 @@ def handle_whatsapp(command: str, raw_args: str, with_notify: bool = True) -> No
                 out = cmd_mirror(toks[0], lots_override=lots)
         elif cmd == "close":
             if not toks:
-                out = ("Usage: /close <result> [reason words...]\n"
+                out = ("Usage: /close [trade-id] <result> [reason words...]\n"
                        "result: win | loss | be | <price>\n"
+                       "A trade ID is required when more than one trade is open.\n"
                        "Optional reason is recorded with the closed trade.\n"
                        "Examples:\n"
                        "  /close win clean run to TP\n"
-                       "  /close loss news spike past stop\n"
-                       "  /close 4720.5 trail-stop hit")
+                       "  /close 20260729T130000Z_ab12cd loss\n"
+                       "  /close 20260729T130000Z_ab12cd 4720.5 trail-stop hit")
             else:
-                first = toks[0].lower().lstrip("@")
-                rest_reason = " ".join(toks[1:]).strip()
-                if first in ("win", "loss", "be"):
-                    out = cmd_close(first, reason=rest_reason)
+                trade_id = None
+                outcome_index = 0
+                possible_id = toks[0].lstrip("#")
+                open_ids = [str(trade.get("id", "")) for trade in load().get("open", [])]
+                if len(toks) >= 2 and any(value.startswith(possible_id) for value in open_ids):
+                    trade_id = possible_id
+                    outcome_index = 1
+                outcome = toks[outcome_index].lower().lstrip("@")
+                rest_reason = " ".join(toks[outcome_index + 1:]).strip()
+                if outcome in ("win", "loss", "be"):
+                    out = cmd_close(outcome, reason=rest_reason, trade_id=trade_id)
                 else:
                     try:
-                        out = cmd_close("price", float(first), reason=rest_reason)
+                        out = cmd_close(
+                            "price", float(outcome), reason=rest_reason, trade_id=trade_id
+                        )
                     except ValueError:
-                        out = f"Unrecognised close argument: {toks[0]}. Use win/loss/be or a price."
+                        out = f"Unrecognised close argument: {toks[outcome_index]}. Use win/loss/be or a price."
         elif cmd == "pnl":
             out = cmd_pnl()
         elif cmd == "current":
@@ -619,23 +696,34 @@ def main() -> None:
         out = cmd_active(rest[0])
     elif sub == "open":
         if len(rest) < 8:
-            sys.exit("Usage: open <account> <dir> <entry> <sl> <tp1> <tp2> <strategy> <risk_pct> [<lots> <risk_usd>]")
+            sys.exit(
+                "Usage: open <account> <dir> <entry> <sl> <tp1> <tp2> <strategy> "
+                "<risk_pct> [<lots> <risk_usd> <signal_id> <instrument> <tp3> <setup_key>]"
+            )
         lots_arg = float(rest[8]) if len(rest) > 8 else None
         risk_usd_arg = float(rest[9]) if len(rest) > 9 else None
         signal_id_arg = rest[10] if len(rest) > 10 else ""
         instrument_arg = rest[11] if len(rest) > 11 else "XAUUSD"
+        tp3_arg = None
+        if len(rest) > 12 and rest[12].lower() not in {"", "none", "null"}:
+            tp3_arg = float(rest[12])
+        setup_key_arg = rest[13] if len(rest) > 13 else ""
         out = cmd_open(rest[0], rest[1], float(rest[2]), float(rest[3]),
                        float(rest[4]), float(rest[5]), rest[6], float(rest[7]),
                        lots=lots_arg, risk_usd=risk_usd_arg,
-                       signal_id=signal_id_arg, instrument=instrument_arg)
+                       signal_id=signal_id_arg, instrument=instrument_arg,
+                       tp3=tp3_arg, setup_key=setup_key_arg)
     elif sub == "mirror":
         lots = float(rest[1]) if len(rest) > 1 else None
         out = cmd_mirror(rest[0], lots_override=lots)
     elif sub == "close":
+        trade_id = None
+        if rest and rest[0].startswith("#"):
+            trade_id = rest.pop(0).lstrip("#")
         res = rest[0]
         price = float(rest[1]) if (len(rest) > 1 and res == "price") else None
         reason = " ".join(rest[2:]) if (len(rest) > 2 and res == "price") else " ".join(rest[1:])
-        out = cmd_close(res, price, reason=reason)
+        out = cmd_close(res, price, reason=reason, trade_id=trade_id)
     elif sub == "pnl":
         out = cmd_pnl()
     elif sub == "current":

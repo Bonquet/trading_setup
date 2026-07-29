@@ -104,7 +104,7 @@ When a brief is produced with a "Valid Trade" decision, call `scripts/notify_wha
 Short message template:
 ```
 XAU {BUY/SELL} @ {entry}
-SL {sl} | TP1 {tp1} | TP2 {tp2}
+SL {sl} | TP1 {tp1} | TP2 {tp2} | TP3 {tp3_if_present}
 RR {rr}R | Risk 1% = {lots} lots
 Strategy: {Pullback/50 EMA Williams}
 Why: {1-line confluence}
