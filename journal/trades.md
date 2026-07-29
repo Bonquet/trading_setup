@@ -283,3 +283,11 @@ Format: one trade per block, newest at top. Claude appends after user confirms a
 - RR: 3.4R | Size: 0.01 lots | Risk: 1% of $816.42
 - Confluence: {'D1_position': 'below_channel', 'H4_position': 'below_channel', 'williams_r14': -80.8, 'stoch_k': 22.0, 'stoch_d': 27.4}
 - Outcome: pending
+
+### 2026-07-29 15:06 UTC — SELL @ 4008.3
+- Session: ny
+- Strategy: 50 EMA Williams (swing)
+- SL: 4041.88 | TP1: 3974.72 | TP2: 3941.15 | TP3: 3924.36
+- RR: 2.5R | Size: 0.01 lots | Risk: 1% of $816.42
+- Confluence: {'D1_position': 'below_channel', 'H4_position': 'below_channel', 'williams_r14': -90.0, 'stoch_k': 16.6, 'stoch_d': 17.4}
+- Outcome: pending
