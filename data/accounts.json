@@ -2,7 +2,7 @@
   "active": "main",
   "accounts": {
     "main": {
-      "balance": 797.06,
+      "balance": 807.81,
       "initial_balance": 5000.0,
       "currency": "USD",
       "prop_firm": true,
@@ -33,28 +33,7 @@
       "risk_pct": 1.0
     }
   },
-  "open": [
-    {
-      "id": "20260803T133027Z_1a9ac6",
-      "signal_id": "20260803T133027Z_a4880140",
-      "setup_key": "XAUUSD:scalp:SELL:2026-08-03 23:15:00",
-      "instrument": "XAUUSD",
-      "account": "main",
-      "direction": "SELL",
-      "entry": 4034.72,
-      "sl": 4041.89,
-      "tp1": 4027.55,
-      "tp2": 4023.97,
-      "tp3": null,
-      "final_tp": 4023.97,
-      "target_hits": {},
-      "lots": 0.01,
-      "risk_usd": 7.17,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (scalp)",
-      "opened_at": "2026-08-03T13:30Z"
-    }
-  ],
+  "open": [],
   "closed": [
     {
       "id": "20260428T1232Z",
@@ -24170,6 +24149,47 @@
       "level_observed_at": "2026-07-30 12:30:00",
       "reason": "TP2 reached",
       "result_notified_at": "2026-07-30T14:35Z"
+    },
+    {
+      "id": "20260803T133027Z_1a9ac6",
+      "signal_id": "20260803T133027Z_a4880140",
+      "setup_key": "XAUUSD:scalp:SELL:2026-08-03 23:15:00",
+      "instrument": "XAUUSD",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 4034.72,
+      "sl": 4041.89,
+      "tp1": 4027.55,
+      "tp2": 4023.97,
+      "tp3": null,
+      "final_tp": 4023.97,
+      "target_hits": {
+        "tp1": {
+          "name": "TP1",
+          "price": 4027.55,
+          "observed_at": "2026-08-03 13:35:00",
+          "notified_at": "2026-08-03T14:55Z"
+        },
+        "tp2": {
+          "name": "TP2",
+          "price": 4023.97,
+          "observed_at": "2026-08-03 13:35:00",
+          "notified_at": "2026-08-03T14:55Z"
+        }
+      },
+      "lots": 0.01,
+      "risk_usd": 7.17,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (scalp)",
+      "opened_at": "2026-08-03T13:30Z",
+      "exit": 4023.97,
+      "pnl_usd": 10.75,
+      "r": 1.5,
+      "status": "win",
+      "closed_at": "2026-08-03T14:55Z",
+      "level_observed_at": "2026-08-03 13:35:00",
+      "reason": "TP2 reached",
+      "result_notified_at": "2026-08-03T14:55Z"
     }
   ]
 }
