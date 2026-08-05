@@ -33,7 +33,28 @@
       "risk_pct": 1.0
     }
   },
-  "open": [],
+  "open": [
+    {
+      "id": "20260805T151027Z_cd5981",
+      "signal_id": "20260805T151027Z_7459289a",
+      "setup_key": "XAUUSD:swing:BUY:2026-08-05 23:00:00",
+      "instrument": "XAUUSD",
+      "account": "main",
+      "direction": "BUY",
+      "entry": 4257.07,
+      "sl": 4209.03,
+      "tp1": 4305.11,
+      "tp2": 4353.15,
+      "tp3": 4377.17,
+      "final_tp": 4377.17,
+      "target_hits": {},
+      "lots": 0.01,
+      "risk_usd": 48.04,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (swing)",
+      "opened_at": "2026-08-05T15:10Z"
+    }
+  ],
   "closed": [
     {
       "id": "20260428T1232Z",
