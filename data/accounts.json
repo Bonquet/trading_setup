@@ -53,6 +53,12 @@
           "price": 4305.11,
           "observed_at": "2026-08-07 08:30:00",
           "notified_at": "2026-08-07T08:39Z"
+        },
+        "tp2": {
+          "name": "TP2",
+          "price": 4353.15,
+          "observed_at": "2026-08-07 12:30:00",
+          "notified_at": "2026-08-07T13:22Z"
         }
       },
       "lots": 0.01,
@@ -74,7 +80,14 @@
       "tp2": 4399.3,
       "tp3": 4425.27,
       "final_tp": 4425.27,
-      "target_hits": {},
+      "target_hits": {
+        "tp1": {
+          "name": "TP1",
+          "price": 4347.35,
+          "observed_at": "2026-08-07 12:30:00",
+          "notified_at": "2026-08-07T13:22Z"
+        }
+      },
       "lots": 0.01,
       "risk_usd": 51.95,
       "risk_pct": 1.0,
