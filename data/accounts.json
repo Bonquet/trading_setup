@@ -2,7 +2,7 @@
   "active": "main",
   "accounts": {
     "main": {
-      "balance": 927.91,
+      "balance": 938.97,
       "initial_balance": 5000.0,
       "currency": "USD",
       "prop_firm": true,
@@ -53,6 +53,12 @@
           "price": 4347.35,
           "observed_at": "2026-08-07 12:30:00",
           "notified_at": "2026-08-07T13:22Z"
+        },
+        "tp2": {
+          "name": "TP2",
+          "price": 4399.3,
+          "observed_at": "2026-08-10 22:50:00",
+          "notified_at": "2026-08-10T23:20Z"
         }
       },
       "lots": 0.01,
@@ -60,33 +66,6 @@
       "risk_pct": 1.0,
       "strategy": "50 EMA Williams (swing)",
       "opened_at": "2026-08-07T08:08Z"
-    },
-    {
-      "id": "20260810T194143Z_d95614",
-      "signal_id": "20260810T194143Z_d2ced39a",
-      "setup_key": "XAUUSD:scalp:BUY:2026-08-11 05:30:00",
-      "instrument": "XAUUSD",
-      "account": "main",
-      "direction": "BUY",
-      "entry": 4389.69,
-      "sl": 4382.32,
-      "tp1": 4397.06,
-      "tp2": 4400.75,
-      "tp3": null,
-      "final_tp": 4400.75,
-      "target_hits": {
-        "tp1": {
-          "name": "TP1",
-          "price": 4397.06,
-          "observed_at": "2026-08-10 22:45:00",
-          "notified_at": "2026-08-10T22:50Z"
-        }
-      },
-      "lots": 0.01,
-      "risk_usd": 7.37,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (scalp)",
-      "opened_at": "2026-08-10T19:41Z"
     }
   ],
   "closed": [
@@ -24292,6 +24271,47 @@
       "level_observed_at": "2026-08-10 18:30:00",
       "reason": "TP3 reached",
       "result_notified_at": "2026-08-10T19:11Z"
+    },
+    {
+      "id": "20260810T194143Z_d95614",
+      "signal_id": "20260810T194143Z_d2ced39a",
+      "setup_key": "XAUUSD:scalp:BUY:2026-08-11 05:30:00",
+      "instrument": "XAUUSD",
+      "account": "main",
+      "direction": "BUY",
+      "entry": 4389.69,
+      "sl": 4382.32,
+      "tp1": 4397.06,
+      "tp2": 4400.75,
+      "tp3": null,
+      "final_tp": 4400.75,
+      "target_hits": {
+        "tp1": {
+          "name": "TP1",
+          "price": 4397.06,
+          "observed_at": "2026-08-10 22:45:00",
+          "notified_at": "2026-08-10T22:50Z"
+        },
+        "tp2": {
+          "name": "TP2",
+          "price": 4400.75,
+          "observed_at": "2026-08-10 23:00:00",
+          "notified_at": "2026-08-10T23:20Z"
+        }
+      },
+      "lots": 0.01,
+      "risk_usd": 7.37,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (scalp)",
+      "opened_at": "2026-08-10T19:41Z",
+      "exit": 4400.75,
+      "pnl_usd": 11.06,
+      "r": 1.5,
+      "status": "win",
+      "closed_at": "2026-08-10T23:20Z",
+      "level_observed_at": "2026-08-10 23:00:00",
+      "reason": "TP2 reached",
+      "result_notified_at": "2026-08-10T23:20Z"
     }
   ]
 }
