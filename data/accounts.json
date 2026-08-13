@@ -2,7 +2,7 @@
   "active": "main",
   "accounts": {
     "main": {
-      "balance": 1061.53,
+      "balance": 1017.21,
       "initial_balance": 5000.0,
       "currency": "USD",
       "prop_firm": true,
@@ -33,28 +33,7 @@
       "risk_pct": 1.0
     }
   },
-  "open": [
-    {
-      "id": "20260812T141753Z_00f14e",
-      "signal_id": "20260812T141753Z_fbaba93b",
-      "setup_key": "XAUUSD:swing:BUY:2026-08-12 23:00:00",
-      "instrument": "XAUUSD",
-      "account": "main",
-      "direction": "BUY",
-      "entry": 4434.11,
-      "sl": 4389.79,
-      "tp1": 4478.44,
-      "tp2": 4522.77,
-      "tp3": 4544.94,
-      "final_tp": 4544.94,
-      "target_hits": {},
-      "lots": 0.01,
-      "risk_usd": 44.33,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (swing)",
-      "opened_at": "2026-08-12T14:17Z"
-    }
-  ],
+  "open": [],
   "closed": [
     {
       "id": "20260428T1232Z",
@@ -24374,6 +24353,34 @@
       "level_observed_at": "2026-08-11 11:35:00",
       "reason": "SL reached",
       "result_notified_at": "2026-08-11T11:55Z"
+    },
+    {
+      "id": "20260812T141753Z_00f14e",
+      "signal_id": "20260812T141753Z_fbaba93b",
+      "setup_key": "XAUUSD:swing:BUY:2026-08-12 23:00:00",
+      "instrument": "XAUUSD",
+      "account": "main",
+      "direction": "BUY",
+      "entry": 4434.11,
+      "sl": 4389.79,
+      "tp1": 4478.44,
+      "tp2": 4522.77,
+      "tp3": 4544.94,
+      "final_tp": 4544.94,
+      "target_hits": {},
+      "lots": 0.01,
+      "risk_usd": 44.33,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (swing)",
+      "opened_at": "2026-08-12T14:17Z",
+      "exit": 4389.79,
+      "pnl_usd": -44.32,
+      "r": -1.0,
+      "status": "loss",
+      "closed_at": "2026-08-13T06:44Z",
+      "level_observed_at": "2026-08-13 05:40:00",
+      "reason": "SL reached",
+      "result_notified_at": "2026-08-13T06:44Z"
     }
   ]
 }
