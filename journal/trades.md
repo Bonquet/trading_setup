@@ -486,3 +486,11 @@ Format: one trade per block, newest at top. Claude appends after user confirms a
 - RR: 2.5R | Size: 0.01 lots | Risk: 1% of $997.16
 - Confluence: {'D1_position': 'above_channel', 'H4_position': 'above_channel', 'williams_r14': -14.0, 'stoch_k': 69.6, 'stoch_d': 45.5}
 - Outcome: pending
+
+### 2026-08-19 16:28 UTC — BUY @ 4492.24
+- Session: scalp
+- Strategy: 50 EMA Williams (scalp)
+- SL: 4480.44 | TP1: 4504.04 | TP2: 4509.94
+- RR: 1.5R | Size: 0.01 lots | Risk: 1% of $997.16
+- Confluence: {'H1_position': 'above_channel', 'M15_position': 'above_channel', 'williams_r14': -5.8, 'stoch_k': 96.7, 'stoch_d': 95.9}
+- Outcome: pending
