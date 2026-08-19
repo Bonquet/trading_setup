@@ -47,7 +47,14 @@
       "tp2": 4548.65,
       "tp3": 4571.59,
       "final_tp": 4571.59,
-      "target_hits": {},
+      "target_hits": {
+        "tp1": {
+          "name": "TP1",
+          "price": 4502.76,
+          "observed_at": "2026-08-19 19:05:00",
+          "notified_at": "2026-08-19T19:21Z"
+        }
+      },
       "lots": 0.01,
       "risk_usd": 45.89,
       "risk_pct": 1.0,
