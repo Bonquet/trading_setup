@@ -33,7 +33,28 @@
       "risk_pct": 1.0
     }
   },
-  "open": [],
+  "open": [
+    {
+      "id": "20260825T155921Z_457853",
+      "signal_id": "20260825T155921Z_b6721671",
+      "setup_key": "XAUUSD:scalp:BUY:2026-08-26 01:45:00",
+      "instrument": "XAUUSD",
+      "account": "main",
+      "direction": "BUY",
+      "entry": 4653.38,
+      "sl": 4643.18,
+      "tp1": 4663.58,
+      "tp2": 4668.68,
+      "tp3": null,
+      "final_tp": 4668.68,
+      "target_hits": {},
+      "lots": 0.01,
+      "risk_usd": 10.2,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (scalp)",
+      "opened_at": "2026-08-25T15:59Z"
+    }
+  ],
   "closed": [
     {
       "id": "20260428T1232Z",
