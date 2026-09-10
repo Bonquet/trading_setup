@@ -33,7 +33,28 @@
       "risk_pct": 1.0
     }
   },
-  "open": [],
+  "open": [
+    {
+      "id": "20260910T120241Z_d22dc0",
+      "signal_id": "20260910T120241Z_9448b254",
+      "setup_key": "XAUUSD:scalp:SELL:2026-09-10 22:00:00",
+      "instrument": "XAUUSD",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 4374.11,
+      "sl": 4382.38,
+      "tp1": 4365.85,
+      "tp2": 4361.71,
+      "tp3": null,
+      "final_tp": 4361.71,
+      "target_hits": {},
+      "lots": 0.01,
+      "risk_usd": 8.27,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (scalp)",
+      "opened_at": "2026-09-10T12:02Z"
+    }
+  ],
   "closed": [
     {
       "id": "20260428T1232Z",
