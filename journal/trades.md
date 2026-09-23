@@ -686,3 +686,11 @@ Format: one trade per block, newest at top. Claude appends after user confirms a
 - Entry: 4272.63 | Exit: 4311.52 (SL hit)
 - Targets: TP1 4233.74 | TP2 4194.85 | TP3 4175.40
 - Outcome: loss | -1.0R | P&L: $-38.89
+
+### 2026-09-23 17:39 UTC — SELL @ 4276.55
+- Session: ny
+- Strategy: 50 EMA Williams (swing)
+- SL: 4314.09 | TP1: 4239.00 | TP2: 4201.46 | TP3: 4182.69
+- RR: 2.5R | Size: 0.01 lots | Risk: 1% of $1105.32
+- Confluence: {'D1_position': 'below_channel', 'H4_position': 'below_channel', 'williams_r14': -96.2, 'stoch_k': 10.0, 'stoch_d': 21.6}
+- Outcome: pending
