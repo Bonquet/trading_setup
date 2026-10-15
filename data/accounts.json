@@ -2,7 +2,7 @@
   "active": "main",
   "accounts": {
     "main": {
-      "balance": 908.51,
+      "balance": 878.19,
       "initial_balance": 5000.0,
       "currency": "USD",
       "prop_firm": true,
@@ -33,35 +33,7 @@
       "risk_pct": 1.0
     }
   },
-  "open": [
-    {
-      "id": "20261014T123440Z_0e58b5",
-      "signal_id": "20261014T123440Z_8d833d7b",
-      "setup_key": "XAUUSD:swing:SELL:2026-10-14 23:00:00",
-      "instrument": "XAUUSD",
-      "account": "main",
-      "direction": "SELL",
-      "entry": 4129.61,
-      "sl": 4159.93,
-      "tp1": 4099.28,
-      "tp2": 4068.95,
-      "tp3": 4053.79,
-      "final_tp": 4053.79,
-      "target_hits": {
-        "tp1": {
-          "name": "TP1",
-          "price": 4099.28,
-          "observed_at": "2026-10-14 12:40:00",
-          "notified_at": "2026-10-14T14:59Z"
-        }
-      },
-      "lots": 0.01,
-      "risk_usd": 30.33,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (swing)",
-      "opened_at": "2026-10-14T12:34Z"
-    }
-  ],
+  "open": [],
   "closed": [
     {
       "id": "20260428T1232Z",
@@ -25385,6 +25357,41 @@
       "level_observed_at": "2026-10-15 00:10:00",
       "reason": "SL reached",
       "result_notified_at": "2026-10-15T00:33Z"
+    },
+    {
+      "id": "20261014T123440Z_0e58b5",
+      "signal_id": "20261014T123440Z_8d833d7b",
+      "setup_key": "XAUUSD:swing:SELL:2026-10-14 23:00:00",
+      "instrument": "XAUUSD",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 4129.61,
+      "sl": 4159.93,
+      "tp1": 4099.28,
+      "tp2": 4068.95,
+      "tp3": 4053.79,
+      "final_tp": 4053.79,
+      "target_hits": {
+        "tp1": {
+          "name": "TP1",
+          "price": 4099.28,
+          "observed_at": "2026-10-14 12:40:00",
+          "notified_at": "2026-10-14T14:59Z"
+        }
+      },
+      "lots": 0.01,
+      "risk_usd": 30.33,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (swing)",
+      "opened_at": "2026-10-14T12:34Z",
+      "exit": 4159.93,
+      "pnl_usd": -30.32,
+      "r": -1.0,
+      "status": "loss",
+      "closed_at": "2026-10-15T05:04Z",
+      "level_observed_at": "2026-10-15 02:55:00",
+      "reason": "SL reached",
+      "result_notified_at": "2026-10-15T05:04Z"
     }
   ]
 }
