@@ -819,3 +819,8 @@ Format: one trade per block, newest at top. Claude appends after user confirms a
 - RR: 2.5R | Size: 0.01 lots | Risk: 1% of $853.83
 - Confluence: {'D1_position': 'below_channel', 'H4_position': 'below_channel', 'williams_r14': -88.4, 'stoch_k': 18.0, 'stoch_d': 19.3}
 - Outcome: pending
+
+### 2026-10-22T06:37Z - CLOSED SELL #20261019T141239Z_889ff5
+- Entry: 4145.97 | Exit: 4091.6 (TP3 hit)
+- Targets: TP1 4124.22 | TP2 4102.47 | TP3 4091.60
+- Outcome: win | 2.5R | P&L: $54.37
