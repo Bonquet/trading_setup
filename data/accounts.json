@@ -2,7 +2,7 @@
   "active": "main",
   "accounts": {
     "main": {
-      "balance": 935.87,
+      "balance": 1109.6,
       "initial_balance": 5000.0,
       "currency": "USD",
       "prop_firm": true,
@@ -33,55 +33,7 @@
       "risk_pct": 1.0
     }
   },
-  "open": [
-    {
-      "id": "20261022T174927Z_e72eb9",
-      "signal_id": "20261022T174927Z_72ab7911",
-      "setup_key": "XAUUSD:swing:SELL:2026-10-23 03:00:00",
-      "instrument": "XAUUSD",
-      "account": "main",
-      "direction": "SELL",
-      "entry": 4046.33,
-      "sl": 4082.63,
-      "tp1": 4010.03,
-      "tp2": 3973.72,
-      "tp3": 3955.57,
-      "final_tp": 3955.57,
-      "target_hits": {
-        "tp1": {
-          "name": "TP1",
-          "price": 4010.03,
-          "observed_at": "2026-10-23 01:45:00",
-          "notified_at": "2026-10-23T01:49Z"
-        }
-      },
-      "lots": 0.01,
-      "risk_usd": 36.3,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (swing)",
-      "opened_at": "2026-10-22T17:49Z"
-    },
-    {
-      "id": "20261029T184600Z_5778cb",
-      "signal_id": "20261029T184600Z_50b921e8",
-      "setup_key": "XAUUSD:swing:SELL:2026-10-30 03:00:00",
-      "instrument": "XAUUSD",
-      "account": "main",
-      "direction": "SELL",
-      "entry": 4010.14,
-      "sl": 4043.33,
-      "tp1": 3976.96,
-      "tp2": 3943.77,
-      "tp3": 3927.17,
-      "final_tp": 3927.17,
-      "target_hits": {},
-      "lots": 0.01,
-      "risk_usd": 33.19,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (swing)",
-      "opened_at": "2026-10-29T18:46Z"
-    }
-  ],
+  "open": [],
   "closed": [
     {
       "id": "20260428T1232Z",
@@ -25590,6 +25542,100 @@
       "level_observed_at": "2026-10-27 14:05:00",
       "reason": "SL reached",
       "result_notified_at": "2026-10-27T14:22Z"
+    },
+    {
+      "id": "20261022T174927Z_e72eb9",
+      "signal_id": "20261022T174927Z_72ab7911",
+      "setup_key": "XAUUSD:swing:SELL:2026-10-23 03:00:00",
+      "instrument": "XAUUSD",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 4046.33,
+      "sl": 4082.63,
+      "tp1": 4010.03,
+      "tp2": 3973.72,
+      "tp3": 3955.57,
+      "final_tp": 3955.57,
+      "target_hits": {
+        "tp1": {
+          "name": "TP1",
+          "price": 4010.03,
+          "observed_at": "2026-10-23 01:45:00",
+          "notified_at": "2026-10-23T01:49Z"
+        },
+        "tp2": {
+          "name": "TP2",
+          "price": 3973.72,
+          "observed_at": "2026-10-30 07:50:00",
+          "notified_at": "2026-10-30T14:19Z"
+        },
+        "tp3": {
+          "name": "TP3",
+          "price": 3955.57,
+          "observed_at": "2026-10-30 12:45:00",
+          "notified_at": "2026-10-30T14:19Z"
+        }
+      },
+      "lots": 0.01,
+      "risk_usd": 36.3,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (swing)",
+      "opened_at": "2026-10-22T17:49Z",
+      "exit": 3955.57,
+      "pnl_usd": 90.76,
+      "r": 2.5,
+      "status": "win",
+      "closed_at": "2026-10-30T14:19Z",
+      "level_observed_at": "2026-10-30 12:45:00",
+      "reason": "TP3 reached",
+      "result_notified_at": "2026-10-30T14:19Z"
+    },
+    {
+      "id": "20261029T184600Z_5778cb",
+      "signal_id": "20261029T184600Z_50b921e8",
+      "setup_key": "XAUUSD:swing:SELL:2026-10-30 03:00:00",
+      "instrument": "XAUUSD",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 4010.14,
+      "sl": 4043.33,
+      "tp1": 3976.96,
+      "tp2": 3943.77,
+      "tp3": 3927.17,
+      "final_tp": 3927.17,
+      "target_hits": {
+        "tp1": {
+          "name": "TP1",
+          "price": 3976.96,
+          "observed_at": "2026-10-30 07:45:00",
+          "notified_at": "2026-10-30T14:19Z"
+        },
+        "tp2": {
+          "name": "TP2",
+          "price": 3943.77,
+          "observed_at": "2026-10-30 13:05:00",
+          "notified_at": "2026-10-30T14:19Z"
+        },
+        "tp3": {
+          "name": "TP3",
+          "price": 3927.17,
+          "observed_at": "2026-10-30 13:35:00",
+          "notified_at": "2026-10-30T14:19Z"
+        }
+      },
+      "lots": 0.01,
+      "risk_usd": 33.19,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (swing)",
+      "opened_at": "2026-10-29T18:46Z",
+      "exit": 3927.17,
+      "pnl_usd": 82.97,
+      "r": 2.5,
+      "status": "win",
+      "closed_at": "2026-10-30T14:19Z",
+      "level_observed_at": "2026-10-30 13:35:00",
+      "reason": "TP3 reached",
+      "result_notified_at": "2026-10-30T14:19Z"
     }
   ]
 }
