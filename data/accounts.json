@@ -2,7 +2,7 @@
   "active": "main",
   "accounts": {
     "main": {
-      "balance": 1156.08,
+      "balance": 1256.98,
       "initial_balance": 5000.0,
       "currency": "USD",
       "prop_firm": true,
@@ -33,41 +33,7 @@
       "risk_pct": 1.0
     }
   },
-  "open": [
-    {
-      "id": "20261111T145026Z_7c4a7b",
-      "signal_id": "20261111T145026Z_f3f02baf",
-      "setup_key": "XAUUSD:swing:SELL:2026-11-11 23:00:00",
-      "instrument": "XAUUSD",
-      "account": "main",
-      "direction": "SELL",
-      "entry": 4017.51,
-      "sl": 4057.88,
-      "tp1": 3977.15,
-      "tp2": 3936.79,
-      "tp3": 3916.61,
-      "final_tp": 3916.61,
-      "target_hits": {
-        "tp1": {
-          "name": "TP1",
-          "price": 3977.15,
-          "observed_at": "2026-11-12 00:00:00",
-          "notified_at": "2026-11-12T02:27Z"
-        },
-        "tp2": {
-          "name": "TP2",
-          "price": 3936.79,
-          "observed_at": "2026-11-12 08:50:00",
-          "notified_at": "2026-11-12T10:01Z"
-        }
-      },
-      "lots": 0.01,
-      "risk_usd": 40.36,
-      "risk_pct": 1.0,
-      "strategy": "50 EMA Williams (swing)",
-      "opened_at": "2026-11-11T14:50Z"
-    }
-  ],
+  "open": [],
   "closed": [
     {
       "id": "20260428T1232Z",
@@ -25773,6 +25739,53 @@
       "level_observed_at": "2026-11-12 09:00:00",
       "reason": "TP3 reached",
       "result_notified_at": "2026-11-12T10:01Z"
+    },
+    {
+      "id": "20261111T145026Z_7c4a7b",
+      "signal_id": "20261111T145026Z_f3f02baf",
+      "setup_key": "XAUUSD:swing:SELL:2026-11-11 23:00:00",
+      "instrument": "XAUUSD",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 4017.51,
+      "sl": 4057.88,
+      "tp1": 3977.15,
+      "tp2": 3936.79,
+      "tp3": 3916.61,
+      "final_tp": 3916.61,
+      "target_hits": {
+        "tp1": {
+          "name": "TP1",
+          "price": 3977.15,
+          "observed_at": "2026-11-12 00:00:00",
+          "notified_at": "2026-11-12T02:27Z"
+        },
+        "tp2": {
+          "name": "TP2",
+          "price": 3936.79,
+          "observed_at": "2026-11-12 08:50:00",
+          "notified_at": "2026-11-12T10:01Z"
+        },
+        "tp3": {
+          "name": "TP3",
+          "price": 3916.61,
+          "observed_at": "2026-11-12 13:20:00",
+          "notified_at": "2026-11-12T18:02Z"
+        }
+      },
+      "lots": 0.01,
+      "risk_usd": 40.36,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (swing)",
+      "opened_at": "2026-11-11T14:50Z",
+      "exit": 3916.61,
+      "pnl_usd": 100.9,
+      "r": 2.5,
+      "status": "win",
+      "closed_at": "2026-11-12T18:02Z",
+      "level_observed_at": "2026-11-12 13:20:00",
+      "reason": "TP3 reached",
+      "result_notified_at": "2026-11-12T18:02Z"
     }
   ]
 }
