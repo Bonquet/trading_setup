@@ -29,6 +29,8 @@ import json
 import sys
 from pathlib import Path
 
+from signal_grading import grade_momentum
+
 ROOT = Path(__file__).resolve().parents[1]
 LEVELS = ROOT / "data" / "cache" / "levels.json"
 OUT = ROOT / "data" / "cache" / "signal.json"
@@ -281,6 +283,7 @@ def main() -> None:
         ),
         "fetched_at_utc": data.get("fetched_at_utc"),
     }
+    sig.update(grade_momentum(direction, wr, k, d, cfg))
     OUT.write_text(json.dumps(sig, indent=2, default=str))
     tp3_text = f" | TP3 {sig['tp3']}" if sig.get("tp3") else ""
     print(

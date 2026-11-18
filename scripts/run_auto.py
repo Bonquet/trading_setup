@@ -25,6 +25,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import accounts
+from signal_grading import GRADING_FIELDS
+from signal_messages import signal_message
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -116,6 +118,7 @@ def build_message(sig: dict, session: str, levels: dict | None = None) -> str:
         f"SL {sig['stop_loss']} | {target_text(sig)}\n"
         f"RR {rr_final}R | {sig['lots']} lots | risk ${sig.get('risk_usd','?')}{cap_str}\n"
         f"Strategy: {sig['strategy']} ({session}){warning_line}\n"
+        f"Grade: {sig.get('setup_grade', 'not recorded')}\n"
         f"\n"
         f"WHY THIS TRADE:\n"
         f"• HTF bias confirmed: {bias_tf} {bias_pos} AND {primary} {primary_pos} — both {side_word} their 50 EMA "
@@ -138,11 +141,7 @@ def build_message(sig: dict, session: str, levels: dict | None = None) -> str:
 
 def build_telegram_signal(sig: dict) -> str:
     """Compact public signal; explanations and account details stay private."""
-    return (
-        f"XAUUSD {sig['direction']} @ {float(sig['entry']):.2f}\n"
-        f"SL: {float(sig['stop_loss']):.2f}\n"
-        f"{target_text(sig, separator=chr(10))}"
-    )
+    return signal_message(sig)
 
 
 def build_content_variables(sig: dict) -> str:
@@ -166,6 +165,7 @@ def append_journal(sig: dict, session: str) -> None:
         f"\n### {ts} — {sig['direction']} @ {sig['entry']}\n"
         f"- Session: {session}\n"
         f"- Strategy: {sig['strategy']}\n"
+        f"- Grade: {sig.get('setup_grade', 'not recorded')}\n"
         f"- SL: {sig['stop_loss']} | {target_text(sig)}\n"
         f"- RR: {sig.get('rr_to_final', sig.get('rr_to_tp2'))}R | "
         f"Size: {sig['lots']} lots | Risk: 1% of ${sig['account']}\n"
@@ -349,6 +349,7 @@ def main() -> None:
         return
 
     signal_id = new_signal_id()
+    sig["signal_id"] = signal_id
     if acct_name != "default":
         opened = accounts.cmd_open(
             acct_name,
@@ -365,6 +366,7 @@ def main() -> None:
             instrument="XAUUSD",
             tp3=float(sig["tp3"]) if sig.get("tp3") is not None else None,
             setup_key=setup_key,
+            grading={key: sig[key] for key in GRADING_FIELDS if key in sig},
         )
         print(opened)
         if not opened.startswith("Opened #"):

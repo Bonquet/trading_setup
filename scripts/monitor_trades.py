@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import accounts
+from signal_messages import signal_message
 from fetch_gold import ENV_PATH, fetch_candles, load_env
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,21 +93,12 @@ def parse_time(value: object) -> datetime | None:
 
 
 def result_message(trade: dict, status: str, exit_price: float) -> str:
-    level = "FINAL TP HIT" if status == "win" else "SL HIT"
-    level_name = "TP" if status == "win" else "SL"
-    return (
-        f"XAUUSD {trade['direction'].upper()} - {level}\n"
-        f"Entry: {float(trade['entry']):.2f}\n"
-        f"{level_name}: {float(exit_price):.2f}"
-    )
+    level = f"{accounts.target_levels(trade)[-1][0]} HIT (FINAL TP)" if status == "win" else "SL HIT"
+    return f"{signal_message(trade)}\n\n{level}\nHit price: {float(exit_price):.2f}"
 
 
 def target_message(trade: dict, name: str, price: float) -> str:
-    return (
-        f"XAUUSD {trade['direction'].upper()} - {name.upper()} HIT\n"
-        f"Entry: {float(trade['entry']):.2f}\n"
-        f"{name.upper()}: {float(price):.2f}"
-    )
+    return f"{signal_message(trade)}\n\n{name.upper()} HIT\nHit price: {float(price):.2f}"
 
 
 def record_target_hit(trade: dict, event: dict) -> None:

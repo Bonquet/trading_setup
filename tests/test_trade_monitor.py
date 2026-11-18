@@ -72,9 +72,11 @@ class TradeMonitorTests(unittest.TestCase):
             ["TP2"],
         )
 
-    def test_target_message_is_compact(self) -> None:
+    def test_target_message_repeats_original_signal(self) -> None:
         message = monitor_trades.target_message(self.trade("SELL"), "TP2", 3980.0)
-        self.assertEqual(message, "XAUUSD SELL - TP2 HIT\nEntry: 4000.00\nTP2: 3980.00")
+        self.assertEqual(message, "XAUUSD SELL @ 4000.00\nSL: 4010.00\n"
+                         "TP1: 3990.00\nTP2: 3980.00\nTP3: 3970.00\nSignal: test\n\n"
+                         "TP2 HIT\nHit price: 3980.00")
 
     def test_closing_one_trade_leaves_the_other_open(self) -> None:
         first = self.trade("SELL")

@@ -281,7 +281,8 @@ def cmd_open(account: str, direction: str, entry: float, sl: float,
              tp1: float, tp2: float, strategy: str, risk_pct: float,
              lots: float | None = None, risk_usd: float | None = None,
              signal_id: str = "", instrument: str = "XAUUSD",
-             tp3: float | None = None, setup_key: str = "") -> str:
+             tp3: float | None = None, setup_key: str = "",
+             grading: dict | None = None) -> str:
     """Called from run_auto.py when a valid signal fires. Creates an open trade record.
     If lots and risk_usd are provided, uses them directly (preserves engine's prop-cap math).
     Otherwise computes from balance × risk_pct, also clamped by account's max_risk_per_trade_usd.
@@ -345,6 +346,9 @@ def cmd_open(account: str, direction: str, entry: float, sl: float,
         "strategy": strategy,
         "opened_at": now_iso(),
     }
+    if grading:
+        from signal_grading import GRADING_FIELDS
+        trade.update({key: grading[key] for key in GRADING_FIELDS if key in grading})
     data["open"].append(trade)
     save(data)
     return (f"Opened #{trade_id} on {account}: {direction.upper()} @ {entry} "
