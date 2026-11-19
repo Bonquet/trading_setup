@@ -77,6 +77,50 @@
       },
       "grade_reason": "2/3 extra momentum checks passed; not a win probability.",
       "grading_version": "williams_momentum_v1"
+    },
+    {
+      "id": "20261119T161159Z_cfb28e",
+      "signal_id": "20261119T161159Z_038a95ed",
+      "setup_key": "XAUUSD:swing:SELL:2026-11-20 03:00:00",
+      "instrument": "XAUUSD",
+      "account": "main",
+      "direction": "SELL",
+      "entry": 3680.97,
+      "sl": 3725.83,
+      "tp1": 3636.1,
+      "tp2": 3591.24,
+      "tp3": 3568.81,
+      "final_tp": 3568.81,
+      "target_hits": {},
+      "lots": 0.01,
+      "risk_usd": 44.86,
+      "risk_pct": 1.0,
+      "strategy": "50 EMA Williams (swing)",
+      "opened_at": "2026-11-19T16:11Z",
+      "setup_grade": "S",
+      "grade_score": 3,
+      "grade_checks": {
+        "williams_strength": {
+          "passed": true,
+          "value": -97.08821786589354,
+          "threshold": -90.0,
+          "operator": "<"
+        },
+        "stochastic_strength": {
+          "passed": true,
+          "value": 5.460327316452777,
+          "threshold": 20.0,
+          "operator": "<"
+        },
+        "stochastic_separation": {
+          "passed": true,
+          "value": 5.567022107425799,
+          "threshold": 5.0,
+          "operator": ">="
+        }
+      },
+      "grade_reason": "3/3 extra momentum checks passed; not a win probability.",
+      "grading_version": "williams_momentum_v1"
     }
   ],
   "closed": [
