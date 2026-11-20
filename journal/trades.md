@@ -969,3 +969,8 @@ Format: one trade per block, newest at top. Claude appends after user confirms a
 - Entry: 3725.01 | Exit: 3620.23 (TP3 hit)
 - Targets: TP1 3683.10 | TP2 3641.19 | TP3 3620.23
 - Outcome: win | 2.5R | P&L: $104.78
+
+### 2026-11-20T04:25Z - CLOSED SELL #20261119T161159Z_cfb28e
+- Entry: 3680.97 | Exit: 3568.81 (TP3 hit)
+- Targets: TP1 3636.10 | TP2 3591.24 | TP3 3568.81
+- Outcome: win | 2.5R | P&L: $112.16
